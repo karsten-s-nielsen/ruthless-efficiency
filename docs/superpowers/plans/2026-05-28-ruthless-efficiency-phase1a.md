@@ -1327,5 +1327,12 @@ blocks above, fixed during execution; the shipped code is the source of truth wh
    (`render_json(r1) == render_json(r2)`) is unchanged. The strategy itself is correct — the 1D unit
    convergence test (`test_finds_minimum_and_ignores_nan_diagnostic`) passes as written.
 
+5. **CI workflow — `--system` install fails on the runner.** The rev-2 `ci.yml` ran
+   `uv pip install --system -e ".[dev]"`, which targets the runner's PEP 668 externally-managed
+   `/usr` Python 3.12 (uv refuses to install there) and ignores the `uv python install 3.10` step
+   entirely — the first push's CI failed in 14s. Fixed to the venv flow that matches local dev and
+   CONTRIBUTING.md: `uv venv --python 3.10` → `uv pip install -e ".[dev]"` → `uv run <tool>` for each
+   gate step. This also guarantees CI runs on 3.10 (the determinism gate's numpy/RNG target).
+
 **As-shipped gate (local, Python 3.10.19):** ruff clean · ruff format clean (31 files) · pyright 0
-errors · import-linter 2 kept / 0 broken · pytest 30 passed.
+errors · import-linter 2 kept / 0 broken · pytest 30 passed. CI mirrors this via the venv flow above.
