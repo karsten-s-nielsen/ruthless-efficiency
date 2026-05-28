@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ruthless-efficiency"
+version = "0.1.0"
+description = "Ruthless Efficiency — a general optimisation/search substrate (pluggable strategies + compute backends)."
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Karsten Skyt" }]
+keywords = ["optimization", "hyperparameter-optimization", "evolutionary-search", "optuna"]
+# numpy pinned <3 so the RandomSearch RNG stream stays stable for the determinism gate (review H-D).
+dependencies = ["pydantic>=2", "numpy>=1.24,<3", "pyyaml>=6"]
+
+[project.optional-dependencies]
+optuna = ["optuna>=4.0"]                                          # Phase 2
+evolve = ["openevolve>=0.2.0"]                                    # Plan 1B (hybrid: our orchestration + OpenEvolve loop)
+backends = ["paramiko>=3", "huggingface_hub>=0.25", "docker>=7"]  # Plan 1B
+dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6", "pyright>=1.1.380", "import-linter>=2.0"]
+
+[project.scripts]
+ruthless = "ruthless.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ruthless"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "S", "BLE", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["ruthless", "tests"]
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

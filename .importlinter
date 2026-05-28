@@ -1,0 +1,28 @@
+[importlinter]
+root_packages =
+    ruthless
+
+[importlinter:contract:core-isolation]
+name = core must not import strategies or backends
+type = forbidden
+source_modules =
+    ruthless.errors
+    ruthless.result
+    ruthless.objective
+    ruthless.backend
+    ruthless.strategy
+    ruthless.guards
+    ruthless.parallel
+    ruthless.config
+    ruthless.report
+forbidden_modules =
+    ruthless.strategies
+    ruthless.backends
+
+[importlinter:contract:strategy-isolation]
+name = strategies must not import backends or each other
+type = forbidden
+source_modules =
+    ruthless.strategies
+forbidden_modules =
+    ruthless.backends
