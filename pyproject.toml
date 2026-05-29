@@ -26,6 +26,16 @@ ruthless = "ruthless.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["ruthless"]
 
+[tool.hatch.build.targets.sdist]
+# Keep internal dev docs out of the published sdist: the planning docs reference sibling repos and
+# the dev process, and bloat the package. The user-facing docs (README, LICENSE, NOTICE, CHANGELOG,
+# CONTRIBUTING, SECURITY, CODE_OF_CONDUCT) and the design ADR/C4 still ship.
+exclude = [
+    "/CLAUDE.md",
+    "/docs/superpowers",
+    "/docs/audits",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
