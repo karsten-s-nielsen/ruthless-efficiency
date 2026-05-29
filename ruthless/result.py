@@ -5,7 +5,9 @@ Result is mutable-during-build but should be treated as immutable once returned 
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 Metrics = dict[str, float]
@@ -14,8 +16,14 @@ Metrics = dict[str, float]
 @dataclass(frozen=True, eq=False)
 class Candidate:
     id: str
-    params: dict[str, Any]  # values must be hashable; treat as immutable after construction
+    params: Mapping[str, Any]  # values must be hashable; READ-ONLY after construction (dedup-key invariant)
     program: str | None = None  # Level-2 candidate source (evolve code-evolution); None for config-only
+
+    def __post_init__(self) -> None:
+        # Defensively copy + freeze params (review H-A): the hash/dedup-key invariant must not be
+        # corruptible by a later mutation of the dict the caller passed in. Construct from a plain
+        # dict; consumers that need a mutable copy do `dict(candidate.params)`.
+        object.__setattr__(self, "params", MappingProxyType(dict(self.params)))
 
     def _key(self) -> tuple[str, frozenset, str | None]:
         return (self.id, frozenset(self.params.items()), self.program)

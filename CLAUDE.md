@@ -31,8 +31,11 @@ not here.
   `objective.evaluate(candidate)` for pure/CPU objectives. The `[backends]` compute backends require a
   **`RemoteObjective`** (an objective that opts into remote execution via a `RemoteRef` = install spec
   + `module:callable` entrypoint, replacing the old `shared.wheel`/`target` convention); they resolve
-  and run the entrypoint (`local_cuda` in-process; `remote_ssh`/`hf_jobs` on a node) and enforce
-  `timeout`. `BackendPool` is a priority-ordered pool with a bounded transient-retry contract.
+  and run the entrypoint (`local_cuda` in-process; `remote_ssh`/`hf_jobs` on a node). The
+  cross-process backends (`remote_ssh`/`hf_jobs`) enforce the per-candidate `timeout`; the in-process
+  ones (`InProcessBackend`, `local_cuda`) accept it for port compatibility but cannot cancel
+  in-process work, so they document-and-ignore it. `BackendPool` is a priority-ordered pool with a
+  bounded transient-retry contract.
 - **Unified error model (1B).** Backends never record a sentinel score: they **raise**
   `TransientEvaluationError` (transport/infra — retried by the pool) or `FatalEvaluationError`
   (unparseable output / missing `remote_ref` / a node-side objective-crash marker). For evolve, the

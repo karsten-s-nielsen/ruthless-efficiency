@@ -19,11 +19,28 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 import sys
 import traceback
 from typing import Any
 
+from ruthless.wire import ERROR_TEXT_KEY, worst_score_metrics
+
 _log = logging.getLogger(__name__)
+
+
+def _load_hf_token_from_file() -> None:
+    """If ``HF_TOKEN_FILE`` is set (the backend passed the token by file, not on the command line),
+    read it into ``HF_TOKEN`` for the objective entrypoint and unlink the file (one-time use)."""
+    token_file = os.environ.get("HF_TOKEN_FILE")
+    if not token_file or os.environ.get("HF_TOKEN"):
+        return
+    try:
+        with open(token_file) as fh:
+            os.environ["HF_TOKEN"] = fh.read().strip()
+        os.unlink(token_file)
+    except OSError:
+        _log.warning("hf_token_file_unreadable")
 
 
 def _load_candidate_config(candidate_path: str) -> dict[str, Any]:
@@ -63,6 +80,8 @@ def main() -> None:
     # Redirect logging to stderr so stdout stays clean for JSON output.
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(name)s %(message)s")
 
+    _load_hf_token_from_file()  # if the backend passed HF_TOKEN by file rather than inline
+
     _log.info("Loading candidate config from %s", candidate_path)
     config = _load_candidate_config(candidate_path)
 
@@ -78,7 +97,7 @@ def main() -> None:
         )
     except Exception:  # noqa: BLE001 - on the node we cannot raise across the wire; emit the failure marker
         _log.exception("Remote worker evaluation failed")
-        metrics = {"combined_score": 0.0, "error": 1.0, "_error_text": traceback.format_exc()}
+        metrics = {**worst_score_metrics(), ERROR_TEXT_KEY: traceback.format_exc()}
 
     # Single JSON line to stdout — the calling backend parses this.
     print(json.dumps(metrics))

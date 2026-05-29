@@ -18,15 +18,17 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
 
             cli = container "CLI" "Config-driven entry point: load config, resolve a trusted objective import-string, build the strategy, run it, print the report." "Python: ruthless.cli"
 
-            config = container "Config" "Layered Pydantic config: discriminated strategy union (random | evolve) + param-space union + BackendConfig." "Python: pydantic v2, pyyaml"
+            config = container "Config" "Layered Pydantic config package (space/common/strategies): discriminated strategy union (random | evolve | optuna) + param-space union + BackendConfig (shell-safe SSH-field validators)." "Python: pydantic v2, pyyaml"
 
             random = container "RandomSearchStrategy" "Built-in zero-dependency search: seeded numpy RNG; drives the determinism gate." "Python: ruthless.strategies.random_"
 
             report = container "Reporting" "Renders a Result to machine JSON and a human Markdown summary." "Python: ruthless.report"
 
-            core = container "Core & Ports" "The pure hexagon: ports, value types, error taxonomy, penalty guards, parallel map, logging, the in-process backend, and remote-resolvability types." "Python: ruthless" {
+            core = container "Core & Ports" "The pure hexagon: a curated public API (ruthless.__all__) over ports, value types, error taxonomy, penalty guards, parallel map, logging, the in-process backend, remote-resolvability types, the cross-wire contract, and a shared temp-file helper." "Python: ruthless" {
                 errors = component "errors" "Taxonomy: Fatal/Transient evaluation errors; classify_metric." "Python"
-                result = component "result" "Candidate (hashable, + program), Evaluation, Result, Metrics." "Python"
+                result = component "result" "Candidate (hashable, read-only params, + program), Evaluation, Result, Metrics." "Python"
+                wire = component "wire" "Cross-wire failure/score contract: combined_score/error/_error_text keys, worst-score sentinel, surfaced-traceback limit." "Python"
+                io = component "_io" "program_to_path — uniform temp .py path-or-None for a Candidate's program (shared by backends + strategies)." "Python"
                 objectivePort = component "objective (port)" "Objective Protocol + CachedObjective (invariant-prep / per-trial-patch + patch_params)." "Python Protocol"
                 backendPort = component "backend (port)" "ComputeBackend Protocol (evaluate(candidate, objective, *, timeout)) + InProcessBackend." "Python"
                 strategyPort = component "strategy (port)" "Direction + the SearchStrategy Protocol." "Python Protocol"
@@ -45,11 +47,12 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 guards -> result "Builds penalty Metrics"
                 errors -> result "References the Metrics scale"
                 testing -> objectivePort "Checks a CachedObjective"
+                io -> result "Reads Candidate.program"
             }
 
             backends = container "Backends [extra]" "Inter-candidate compute dispatch on the single port. Priority-ordered pool + adapters; raise Transient/Fatal (never a sentinel)." "Python: ruthless.backends" {
                 pool = component "pool" "BackendPool: priority-queue dispatch + bounded transient-retry." "Python"
-                base = component "base" "program_to_path, parse_last_json_line, is_objective_failure, require_remote." "Python"
+                base = component "base" "parse_last_json_line, is_objective_failure, require_remote; re-exports program_to_path (from core _io) + the wire failure-marker contract." "Python"
                 localCuda = component "local_cuda" "Resolves the entrypoint in-process on a CUDA device." "Python: torch (consumer)"
                 remoteSsh = component "remote_ssh" "scp + ssh to a node; per-candidate timeout." "Python: ssh/scp CLI"
                 hfJobs = component "hf_jobs" "PEP-723 UV job; install spec from RemoteRef.package." "Python: huggingface_hub"

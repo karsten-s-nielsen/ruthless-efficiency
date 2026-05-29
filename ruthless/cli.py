@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 import importlib
+from collections.abc import Callable
+from typing import Any
 
 from ruthless.backend import InProcessBackend
 from ruthless.config import RandomConfig, RuthlessConfig
@@ -24,10 +26,20 @@ def resolve_objective(spec: str) -> Objective:
     return obj
 
 
+# Strategy-config type -> builder. Only `random` is CLI-available: it needs nothing beyond the config
+# (evolve/optuna require a results_dir/backend the CLI does not supply, so they stay programmatic-only
+# by design). A registry instead of an isinstance ladder mirrors backends/_REGISTRY (Open/Closed): a
+# new CLI-available strategy registers a row rather than editing a branch.
+_STRATEGY_BUILDERS: dict[type, Callable[[Any, int], Any]] = {
+    RandomConfig: lambda strategy_cfg, seed: RandomSearchStrategy(strategy_cfg, seed=seed),
+}
+
+
 def _build_strategy(cfg: RuthlessConfig):
-    if isinstance(cfg.strategy, RandomConfig):
-        return RandomSearchStrategy(cfg.strategy, seed=cfg.seed)
-    raise ValueError(f"strategy {cfg.strategy.kind!r} not available in this build")
+    builder = _STRATEGY_BUILDERS.get(type(cfg.strategy))
+    if builder is None:
+        raise ValueError(f"strategy {cfg.strategy.kind!r} not available in this build")
+    return builder(cfg.strategy, cfg.seed)
 
 
 def main() -> None:

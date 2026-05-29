@@ -19,6 +19,18 @@ _ACQUIRE_TIMEOUT = 3600  # seconds — deadlock guard waiting for an idle backen
 
 
 class BackendPool:
+    """Priority-ordered, concurrent inter-candidate dispatch over several ``ComputeBackend``s.
+
+    Backends are tried in list order (index = priority; lower runs first); a fast backend re-enters
+    the idle queue sooner and so takes more work. A ``TransientEvaluationError`` releases the backend
+    and retries on a *different* available one up to ``max_retries``; a ``FatalEvaluationError``
+    surfaces immediately; transient exhaustion re-raises the last transient error.
+
+    Args:
+        backends: Backends in priority order (at least one).
+        max_retries: Extra attempts on transient failures, each preferring an untried backend.
+    """
+
     def __init__(self, backends: list[ComputeBackend], *, max_retries: int = 2) -> None:
         if not backends:
             raise ValueError("BackendPool requires at least one backend")

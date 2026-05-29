@@ -6,7 +6,7 @@
 |---------|--------------------|
 | 0.x     | :white_check_mark: |
 
-The project is pre-1.0; only the latest `0.x` release receives security fixes.
+The project is pre-1.0; security fixes are issued against the current `0.x` release line.
 
 ## Reporting a Vulnerability
 
@@ -30,8 +30,13 @@ The pure hexagonal **core** (`ruthless/`, the default install) is a computation 
 
 Optional extras broaden the surface and are **not** installed by default:
 
-- `[backends]` (Plan 1B) adds SSH / Hugging Face Jobs / Docker compute backends — these open network
-  connections and dispatch remote work.
-- `[evolve]` (Plan 1B) adds an evolutionary strategy that executes candidate programs.
+- The `[backends]` extra adds SSH / Hugging Face Jobs / Docker compute backends — these open network
+  connections and dispatch remote work. SSH calls use key-based auth (`BatchMode=yes`,
+  `StrictHostKeyChecking=accept-new`); secrets (e.g. `HF_TOKEN`) are passed to the node by a 0600
+  file, not on the command line.
+- The `[evolve]` extra adds an evolutionary strategy that executes candidate programs. LLM-generated
+  code is screened by an AST allowlist (a defense-in-depth belt, not a sandbox boundary — see
+  [docs/adr/ADR-001-ast-sandbox-security-model.md](docs/adr/ADR-001-ast-sandbox-security-model.md));
+  run untrusted code only inside an OS-level sandbox (container/VM).
 
 Treat objective functions and any remote-backend configuration as trusted code paths.
