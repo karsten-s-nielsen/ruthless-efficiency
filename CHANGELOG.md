@@ -5,9 +5,16 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
-## [Unreleased]
+## [0.2.0] - 2026-05-28
+
+First published release. Ships the Phase 2 `[optuna]` extra alongside the Phase 1A/1B core, and folds
+in the 2026-05-28 audit cleanup (curated public API, value-object immutability, security hardening).
 
 ### Added
+- `[optuna]` extra: `OptunaStrategy` — resumable Bayesian/sampler calibration on a SQLite study
+  (single-process resume; warm-start; C3 resume contract).
+- `CachedObjective` core Protocol (one-time `prepare()` invariant + per-trial `evaluate_patch`) and
+  `ruthless.testing.assert_cache_equivalence`, proving the fast path equals the full recompute.
 - Curated top-level public API: import the supported surface from `ruthless` directly
   (`from ruthless import Candidate, RandomConfig, RandomSearchStrategy, InProcessBackend, ...`), with
   an explicit `__all__`. Per-strategy namespaces re-export their strategy
@@ -34,14 +41,6 @@ API may change between minor versions until `1.0`).
   allowlist (blocks injection when a config is sourced from templated input).
 - CI workflow actions are pinned to commit SHAs (supply-chain hardening), matching the publish
   workflow.
-
-## [0.2.0]
-
-### Added
-- `[optuna]` extra: `OptunaStrategy` — resumable Bayesian/sampler calibration on a SQLite study
-  (single-process resume; warm-start; C3 resume contract).
-- `CachedObjective` core Protocol (one-time `prepare()` invariant + per-trial `evaluate_patch`) and
-  `ruthless.testing.assert_cache_equivalence`, proving the fast path equals the full recompute.
 
 ## [0.1.0]
 
