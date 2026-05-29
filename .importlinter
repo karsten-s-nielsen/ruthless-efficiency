@@ -6,6 +6,8 @@ root_packages =
 name = core must not import strategies or backends
 type = forbidden
 source_modules =
+    ruthless._io
+    ruthless._logging
     ruthless.errors
     ruthless.result
     ruthless.objective
@@ -14,9 +16,13 @@ source_modules =
     ruthless.guards
     ruthless.parallel
     ruthless.config
+    ruthless.config.common
+    ruthless.config.space
+    ruthless.config.strategies
     ruthless.report
     ruthless.remote
     ruthless.testing
+    ruthless.wire
 forbidden_modules =
     ruthless.strategies
     ruthless.backends

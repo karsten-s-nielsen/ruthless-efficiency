@@ -19,12 +19,13 @@ import hashlib
 import importlib
 import json
 import os
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
+from ruthless._io import program_to_path
 from ruthless._logging import get_logger
 from ruthless.backend import ComputeBackend
 from ruthless.config import EvolveConfig
@@ -41,10 +42,13 @@ _log = get_logger("strategies.evolve")
 # --------------------------------------------------------------------------- hooks + objective
 
 
+@cache
 def _resolve_hook(import_string: str, *, expect: str) -> Any:
     """Resolve a "module:attr" import-string (importlib + getattr; never eval) and type-check it.
 
-    Mirrors the 1A CLI objective loader's trusted-config convention."""
+    Mirrors the 1A CLI objective loader's trusted-config convention. Cached: resolution is pure for a
+    given (import_string, expect), so the per-candidate evaluate() path resolves the entrypoint once
+    rather than re-importing on every trial."""
     module_path, _, attr = import_string.partition(":")
     if not attr:
         raise FatalEvaluationError(f"hook import-string must be 'module:attr', got {import_string!r}")
@@ -72,19 +76,10 @@ class _ConfigRemoteObjective:
 
     def evaluate(self, candidate: Candidate) -> Metrics:
         fn = _resolve_hook(self._ref.entrypoint, expect="callable")
-        kw = {"candidate_config": candidate.params, "device": "cpu", "epochs": self.epochs, "seed": self.seed}
-        if candidate.program is None:
-            return fn(**kw, program_path=None)
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as tmp:
-            tmp.write(candidate.program)
-            path = tmp.name
-        try:
-            return fn(**kw, program_path=path)
-        finally:
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+        # consumers get a plain, mutable dict (candidate.params is a read-only Mapping)
+        kw = {"candidate_config": dict(candidate.params), "device": "cpu", "epochs": self.epochs, "seed": self.seed}
+        with program_to_path(candidate) as program_path:  # uniform path-or-None (shared core helper)
+            return fn(**kw, program_path=program_path)
 
 
 def _remote_objective_from_config(cfg: EvolveConfig) -> RemoteObjective:
@@ -310,6 +305,19 @@ def _write_evaluator_script(results_dir: Path, cfg: EvolveConfig) -> Path:
 
 
 class EvolveStrategy:
+    """Thin :class:`~ruthless.strategy.SearchStrategy` adapter over OpenEvolve.
+
+    OpenEvolve owns the evolutionary loop; this strategy owns orchestration: config translation, seed
+    evaluation with a resume cache, the standalone evaluator script the worker subprocess rebuilds,
+    and ``Result`` mapping. ``EvolveConfig`` is the single source of truth — ``run`` asserts the
+    passed objective agrees with it before doing anything.
+
+    Args:
+        config: Evolve configuration (the canonical source for epochs/seed/backend/LLM/evolution).
+        results_dir: Output + checkpoint directory (also where the resume cache lives).
+        resume: If ``True``, reuse cached seed results matching the eval fingerprint.
+    """
+
     def __init__(self, config: EvolveConfig, *, results_dir: str | Path, resume: bool = False) -> None:
         self._cfg = config
         self._results_dir = Path(results_dir)

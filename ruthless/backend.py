@@ -19,6 +19,13 @@ class ComputeBackend(Protocol):
 
 
 class InProcessBackend:
+    """The default core backend: calls ``objective.evaluate(candidate)`` in the current process.
+
+    For pure/CPU objectives that need no remote dispatch. ``timeout`` is accepted for port
+    compatibility and ignored (there is no in-process cancellation); the remote backends in the
+    ``[backends]`` extra enforce it.
+    """
+
     def evaluate(self, candidate: Candidate, objective: Objective, *, timeout: float | None = None) -> Metrics:
         # timeout ignored in-process (no cross-process cancellation here); enforced by remote backends in 1B.
         return objective.evaluate(candidate)

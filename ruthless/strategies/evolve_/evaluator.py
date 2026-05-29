@@ -32,13 +32,14 @@ from ruthless.errors import FatalEvaluationError, TransientEvaluationError
 from ruthless.remote import RemoteObjective
 from ruthless.result import Candidate
 from ruthless.strategies.evolve_.sandbox import ValidationProfile, validate_program
+from ruthless.wire import COMBINED_SCORE_KEY, ERROR_TEXT_KEY, worst_score_metrics
 
 _log = get_logger("strategies.evolve.evaluator")
 
 
 def fail_metrics() -> dict[str, float]:
     """The OpenEvolve worst-score sentinel for a failed candidate (fresh dict each call)."""
-    return {"combined_score": 0.0, "error": 1.0}
+    return worst_score_metrics()
 
 
 @dataclass(frozen=True)
@@ -139,9 +140,9 @@ class EvolveEvaluator:
         except Exception:  # noqa: BLE001 - H1: the single failure->sentinel mapping point (any error -> score)
             return self._sentinel(f"backend_error: {traceback.format_exc()}", kind="objective")
 
-        error_text = metrics.pop("_error_text", None)
+        error_text = metrics.pop(ERROR_TEXT_KEY, None)
         combined = self._compute_combined_score(metrics)
-        result_metrics = {**metrics, "combined_score": combined}
+        result_metrics = {**metrics, COMBINED_SCORE_KEY: combined}
         if error_text is not None:
             return EvaluationResult(metrics=result_metrics, artifacts={"error": str(error_text)})
         return EvaluationResult.from_dict(result_metrics)

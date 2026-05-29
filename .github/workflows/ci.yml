@@ -4,8 +4,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
       - run: uv python install 3.10
       - run: uv venv --python 3.10
       - run: uv pip install -e ".[dev,backends,evolve,optuna]"
@@ -20,8 +20,8 @@ jobs:
     # must pass WITHOUT the [backends]/[evolve]/[optuna] heavy deps (huggingface_hub/docker/openevolve/optuna).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
       - run: uv python install 3.10
       - run: uv venv --python 3.10
       - run: uv pip install -e ".[dev]"

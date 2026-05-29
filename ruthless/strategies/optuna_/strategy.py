@@ -29,6 +29,19 @@ def _suggest(trial: Any, name: str, spec: ParamSpec) -> Any:
 
 
 class OptunaStrategy:
+    """Resumable Bayesian/sampler calibration over an :class:`~ruthless.config.OptunaConfig` space.
+
+    Drives an Optuna study (TPE or random sampler) via ``study.optimize``. With a SQLite store it is
+    resumable (single-process): a remaining-trials guard avoids lost/duplicate trials and ``best`` +
+    ``history`` are reconstructed from the whole store. If the objective is a
+    :class:`~ruthless.objective.CachedObjective`, the invariant is prepared once and the fast
+    ``evaluate_patch`` path is used; tuning a param outside ``patch_params`` is rejected.
+
+    Args:
+        config: Strategy configuration (metric, direction, n_trials, sampler, param_space, store).
+        seed: Sampler seed (note: Optuna does not persist sampler RNG across resume).
+    """
+
     def __init__(self, config: OptunaConfig, *, seed: int = 42) -> None:
         self._cfg = config
         self._seed = seed
@@ -89,13 +102,18 @@ class OptunaStrategy:
                 ok=True,
             )
 
-        completed = [t for t in study.get_trials(deepcopy=False) if t.state == TrialState.COMPLETE]
+        # Single post-optimize snapshot reused for both the COMPLETE filter and the total count (each
+        # `study.trials`/`get_trials` is a storage round-trip; on a resumed SQLite study that reloads
+        # every persisted trial). NOTE: the two PRE-optimize reads are deliberately NOT collapsed —
+        # they straddle `enqueue_trial`, so reading once would change the warm-start trial count.
+        all_trials = study.get_trials(deepcopy=False)
+        completed = [t for t in all_trials if t.state == TrialState.COMPLETE]
         history = [_to_eval(t) for t in completed]
         best: Evaluation | None = _to_eval(study.best_trial) if completed else None
         return Result(
             best=best,
             history=history,
-            diagnostics={"n_trials": len(study.trials), "n_complete": len(completed), "sampler": cfg.sampler},
+            diagnostics={"n_trials": len(all_trials), "n_complete": len(completed), "sampler": cfg.sampler},
             provenance={
                 "strategy": "optuna",
                 "seed": self._seed,

@@ -30,6 +30,17 @@ def _sample(spec: ParamSpec, rng: np.random.Generator):
 
 
 class RandomSearchStrategy:
+    """Seeded random search over a :class:`~ruthless.config.RandomConfig` param space.
+
+    Samples ``n_trials`` candidates from the configured param space with a numpy RNG seeded by
+    ``seed`` (deterministic for a fixed seed + numpy version), evaluates each via the given backend,
+    and returns the best by the configured metric/direction. The zero-dependency baseline strategy.
+
+    Args:
+        config: Strategy configuration (metric, direction, n_trials, param_space).
+        seed: RNG seed for reproducible sampling.
+    """
+
     def __init__(self, config: RandomConfig, *, seed: int = 42) -> None:
         self._cfg = config
         self._seed = seed

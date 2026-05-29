@@ -109,3 +109,55 @@ def test_remote_ssh_rejects_plain_objective(patched_ssh):
     b = RemoteSSHBackend(host="h", user="u")
     with pytest.raises(FatalEvaluationError):
         b.evaluate(Candidate("r0", {"x": 1.0}), _Plain())
+
+
+def test_remote_ssh_uses_hardened_ssh_options(monkeypatch):
+    run_calls: list[list] = []
+
+    def fake_run(cmd, **kwargs):
+        run_calls.append(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="OK", stderr="")
+
+    popen_argv: dict = {}
+
+    def fake_popen(cmd, **kwargs):
+        popen_argv["cmd"] = cmd
+        return _FakeProc('{"loss": 0.0}\n')
+
+    monkeypatch.setattr(remote_ssh.subprocess, "run", fake_run)
+    monkeypatch.setattr(remote_ssh.subprocess, "Popen", fake_popen)
+    b = RemoteSSHBackend(host="h", user="u")
+    b.evaluate(Candidate("r0", {"x": 1.0}), _Remote())
+
+    # The worker ssh invocation and the helper ssh/scp invocations must all carry the hardening opts.
+    assert "BatchMode=yes" in popen_argv["cmd"]
+    assert "StrictHostKeyChecking=accept-new" in popen_argv["cmd"]
+    assert any("BatchMode=yes" in c for c in run_calls)
+    assert any("StrictHostKeyChecking=accept-new" in c for c in run_calls)
+
+
+def test_remote_ssh_passes_hf_token_by_file_not_inline(patched_ssh):
+    monkeypatch, make_popen, captured = patched_ssh
+    monkeypatch.setenv("HF_TOKEN", "secrettoken123")
+    monkeypatch.setattr(remote_ssh.subprocess, "Popen", make_popen('{"loss": 0.0}\n'))
+    b = RemoteSSHBackend(host="h", user="u")
+    b.evaluate(Candidate("r0", {"x": 1.0}), _Remote())
+    cmd = captured["cmd"]
+    assert "secrettoken123" not in cmd  # the secret is NOT inline on the command line
+    assert "HF_TOKEN_FILE=.hf_token" in cmd  # only the (non-secret) file path is passed
+
+
+def test_remote_ssh_ensures_remote_dir_once_across_evaluations(monkeypatch):
+    mkdir_calls = {"n": 0}
+
+    def fake_run(cmd, **kwargs):
+        if any("mkdir -p" in str(part) for part in cmd):
+            mkdir_calls["n"] += 1
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="OK", stderr="")
+
+    monkeypatch.setattr(remote_ssh.subprocess, "run", fake_run)
+    monkeypatch.setattr(remote_ssh.subprocess, "Popen", lambda cmd, **k: _FakeProc('{"loss": 0.0}\n'))
+    b = RemoteSSHBackend(host="h", user="u")
+    b.evaluate(Candidate("r0", {"x": 1.0}), _Remote())
+    b.evaluate(Candidate("r1", {"x": 2.0}), _Remote())
+    assert mkdir_calls["n"] == 1  # idempotent mkdir runs once per backend, not per candidate
