@@ -15,9 +15,10 @@ Metrics = dict[str, float]
 class Candidate:
     id: str
     params: dict[str, Any]  # values must be hashable; treat as immutable after construction
+    program: str | None = None  # Level-2 candidate source (evolve code-evolution); None for config-only
 
-    def _key(self) -> tuple[str, frozenset]:
-        return (self.id, frozenset(self.params.items()))
+    def _key(self) -> tuple[str, frozenset, str | None]:
+        return (self.id, frozenset(self.params.items()), self.program)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Candidate) and self._key() == other._key()

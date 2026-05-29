@@ -15,6 +15,7 @@ source_modules =
     ruthless.parallel
     ruthless.config
     ruthless.report
+    ruthless.remote
 forbidden_modules =
     ruthless.strategies
     ruthless.backends
@@ -26,3 +27,11 @@ source_modules =
     ruthless.strategies
 forbidden_modules =
     ruthless.backends
+
+[importlinter:contract:backends-isolation]
+name = backends must not import strategies
+type = forbidden
+source_modules =
+    ruthless.backends
+forbidden_modules =
+    ruthless.strategies

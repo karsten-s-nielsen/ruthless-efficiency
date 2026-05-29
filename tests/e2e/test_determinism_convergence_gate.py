@@ -1,7 +1,7 @@
 """Standing CI gate (spec §8): deterministic + convergent, zero domain/strategy-extra deps."""
 
 from ruthless.backend import InProcessBackend
-from ruthless.config import RuthlessConfig
+from ruthless.config import RandomConfig, RuthlessConfig
 from ruthless.report import render_json
 from ruthless.result import Candidate
 from ruthless.strategies.random_.strategy import RandomSearchStrategy
@@ -33,6 +33,7 @@ def _cfg():
 
 def test_converges_and_is_reproducible():
     cfg = _cfg()
+    assert isinstance(cfg.strategy, RandomConfig)  # narrow the discriminated union
     r1 = RandomSearchStrategy(cfg.strategy, seed=cfg.seed).run(_Bowl(), backend=InProcessBackend())
     r2 = RandomSearchStrategy(cfg.strategy, seed=cfg.seed).run(_Bowl(), backend=InProcessBackend())
 
