@@ -1,8 +1,12 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Currently at **Phase 1A** (`0.1.0`) — core ports + a built-in
-`RandomSearchStrategy`, validated by a dependency-free determinism + convergence gate.
+pluggable compute backends. Ships at `0.1.0` (`0.x` — API unstable). **Phase 1A** delivered the core
+ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
+optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
+per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
+adapter over OpenEvolve, + the AST sandbox). The lakehouse consumer migration (Plan 1B Part C) runs
+in the lakehouse repo, not here.
 
 ## Architecture
 
@@ -10,16 +14,28 @@ pluggable compute backends. Currently at **Phase 1A** (`0.1.0`) — core ports +
   `SearchStrategy`, `ComputeBackend` — structural `Protocol`s) and **value types** (`Candidate`,
   `Metrics = dict[str, float]`, `Evaluation`, `Result`). The core depends only on `pydantic` +
   `numpy` (+ `pyyaml`).
-- **One-way dependency direction.** Strategies (`ruthless/strategies/`) and backends depend on the
-  core, never the reverse; strategies do not import each other or backends. Enforced by import-linter
-  (`.importlinter`, 2 contracts) — `lint-imports` must stay green.
+- **One-way dependency direction.** Strategies (`ruthless/strategies/`) and backends
+  (`ruthless/backends/`) depend on the core, never the reverse; strategies do not import each other or
+  the backends package, and backends do not import strategies. Enforced by import-linter
+  (`.importlinter`, **3 contracts**) — `lint-imports` must stay green. (`EvolveStrategy` receives a
+  backend via `run(objective, *, backend)`; its OpenEvolve worker script imports `create_backend` at
+  runtime in the worker subprocess — not a static strategy→backends import.)
 - **Each strategy owns its loop.** The core imposes no template-method driver. A strategy drives the
   search and returns a `Result`; `report.py` renders it (JSON + Markdown). Persistence/resume is
   strategy-internal.
-- **Backends are the inter-candidate dispatch path.** One evaluation → one compute resource. A
-  backend returns the objective's metrics **verbatim** — it does not police metric values.
-  `InProcessBackend` is the only Phase 1A backend; `timeout` is on the port (`evaluate(..., *,
-  timeout=None)`) but only remote backends (Plan 1B) enforce it.
+- **Backends are the inter-candidate dispatch path.** One evaluation → one compute resource, on the
+  single port `evaluate(candidate, objective, *, timeout) -> Metrics`. `InProcessBackend` (core) runs
+  `objective.evaluate(candidate)` for pure/CPU objectives. The `[backends]` compute backends require a
+  **`RemoteObjective`** (an objective that opts into remote execution via a `RemoteRef` = install spec
+  + `module:callable` entrypoint, replacing the old `shared.wheel`/`target` convention); they resolve
+  and run the entrypoint (`local_cuda` in-process; `remote_ssh`/`hf_jobs` on a node) and enforce
+  `timeout`. `BackendPool` is a priority-ordered pool with a bounded transient-retry contract.
+- **Unified error model (1B).** Backends never record a sentinel score: they **raise**
+  `TransientEvaluationError` (transport/infra — retried by the pool) or `FatalEvaluationError`
+  (unparseable output / missing `remote_ref` / a node-side objective-crash marker). For evolve, the
+  `EvolveEvaluator` is the **single** place that maps any failure to the OpenEvolve worst-score
+  sentinel (objective vs. infra distinguished in artifacts), because OpenEvolve needs a score per
+  candidate.
 
 ## Key conventions
 
@@ -71,14 +87,16 @@ determinism gate), pyyaml. Dev: pytest + hypothesis, ruff, pyright, import-linte
 
 ## Scope map
 
-- **Phase 1A (now):** core ports + value types + config + reporting + observability +
+- **Phase 1A (done):** core ports + value types + config + reporting + observability +
   `RandomSearchStrategy` + the determinism/convergence gate.
-- **Plan 1B:** `EvolveStrategy` (our orchestration over OpenEvolve), `BackendPool` + SSH/HF-Jobs/
-  Docker backends, per-candidate timeout + transient-retry contract.
+- **Plan 1B — library side (done):** `[backends]` (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/
+  `docker`, timeout + transient-retry contract, `RemoteObjective`/`RemoteRef`) and `[evolve]`
+  (`EvolveStrategy` over OpenEvolve + the AST sandbox). **Part C (lakehouse consumer migration)** is
+  pending and runs in the lakehouse repo (behind its hard-gate).
 - **Phase 2:** `OptunaStrategy`, `CachedObjective`, group-scoring.
 
 ## Reference docs
 
 - Spec: `docs/superpowers/specs/2026-05-28-optimization-engine-carveout-design.md`
-- Phase 1A plan (+ execution-deviations addendum):
-  `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1a.md`
+- Phase 1A plan: `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1a.md`
+- Phase 1B plan (rev 3): `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1b.md`

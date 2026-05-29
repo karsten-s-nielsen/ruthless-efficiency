@@ -8,9 +8,22 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv python install 3.10
       - run: uv venv --python 3.10
-      - run: uv pip install -e ".[dev]"
+      - run: uv pip install -e ".[dev,backends,evolve]"
       - run: uv run ruff check ruthless tests
       - run: uv run ruff format --check ruthless tests
       - run: uv run pyright
       - run: uv run lint-imports
       - run: uv run pytest -v
+
+  core-lean:
+    # Proves the default install stays dependency-light: core imports + the core test subset
+    # must pass WITHOUT the [backends]/[evolve] heavy deps (huggingface_hub/docker/openevolve).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - run: uv python install 3.10
+      - run: uv venv --python 3.10
+      - run: uv pip install -e ".[dev]"
+      - run: uv run python -c "import ruthless; from ruthless.strategies.random_.strategy import RandomSearchStrategy; print(ruthless.__version__)"
+      - run: uv run pytest -v --ignore=tests/backends --ignore=tests/strategies/evolve --ignore=tests/e2e/test_evolve_orchestration_gate.py

@@ -15,9 +15,9 @@ keywords = ["optimization", "hyperparameter-optimization", "evolutionary-search"
 dependencies = ["pydantic>=2", "numpy>=1.24,<3", "pyyaml>=6"]
 
 [project.optional-dependencies]
-optuna = ["optuna>=4.0"]                                          # Phase 2
-evolve = ["openevolve>=0.2.0"]                                    # Plan 1B (hybrid: our orchestration + OpenEvolve loop)
-backends = ["paramiko>=3", "huggingface_hub>=0.25", "docker>=7"]  # Plan 1B
+optuna = ["optuna>=4.0"]                            # Phase 2
+evolve = ["openevolve>=0.2.0"]                      # Plan 1B (hybrid: our orchestration + OpenEvolve loop)
+backends = ["huggingface_hub>=0.25", "docker>=7"]   # Plan 1B: hf_jobs (+ docker). ssh uses system ssh/scp; local_cuda's torch is the consumer's.
 dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6", "pyright>=1.1.380", "import-linter>=2.0"]
 
 [project.scripts]
