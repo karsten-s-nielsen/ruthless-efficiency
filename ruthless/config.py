@@ -176,8 +176,34 @@ class EvolveConfig(BaseModel):
         return self
 
 
-# Strategy union — optuna appends its config in Phase 2.
-StrategyConfig = Annotated[RandomConfig | EvolveConfig, Field(discriminator="kind")]
+class StoreConfig(BaseModel):
+    kind: Literal["sqlite"] = "sqlite"  # only sqlite in Phase 2 (single-process resume; RDB is §10/later)
+    path: str
+
+
+class OptunaConfig(BaseModel):
+    """OptunaStrategy config ([optuna]). SQLite store = single-process resume only; concurrent dispatch
+    over a backend pool (deferred) would require an RDB (§10/§11)."""
+
+    kind: Literal["optuna"]
+    metric: str
+    direction: Direction = Direction.MINIMIZE
+    n_trials: int = 50
+    sampler: Literal["tpe", "random"] = "tpe"
+    param_space: dict[str, ParamSpec] = {}
+    warm_start: dict[str, Any] = {}  # enqueued as the forced first trial (baseline)
+    store: StoreConfig | None = None  # None => in-memory study (no resume)
+
+    @model_validator(mode="after")
+    def _warm_start_keys(self) -> OptunaConfig:
+        extra = set(self.warm_start) - set(self.param_space)
+        if extra:  # a typo'd warm-start key would be silently ignored by Optuna — fail loudly
+            raise ValueError(f"warm_start keys {sorted(extra)} are not in param_space")
+        return self
+
+
+# Strategy union — random (1A) + evolve (1B) + optuna (Phase 2).
+StrategyConfig = Annotated[RandomConfig | EvolveConfig | OptunaConfig, Field(discriminator="kind")]
 
 
 class RuthlessConfig(BaseModel):

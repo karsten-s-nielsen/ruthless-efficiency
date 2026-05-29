@@ -16,6 +16,7 @@ source_modules =
     ruthless.config
     ruthless.report
     ruthless.remote
+    ruthless.testing
 forbidden_modules =
     ruthless.strategies
     ruthless.backends
