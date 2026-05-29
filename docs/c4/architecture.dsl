@@ -1,5 +1,5 @@
 # Structurizr DSL
-workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies + pluggable compute backends (Phase 1A + 1B library side)." {
+workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies + pluggable compute backends (Phase 1A + 1B + 2 library side)." {
 
     model {
         user = person "Optimisation User" "A developer who writes an Objective and a search config, then runs a search programmatically or via the CLI."
@@ -12,7 +12,9 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
 
         node = softwareSystem "Compute Node" "An SSH host or Hugging Face Job that installs the remote_package, imports the entrypoint, and runs train_and_evaluate." "External"
 
-        res = softwareSystem "ruthless-efficiency" "Optimisation/search substrate: pure core + RandomSearch + (1B) EvolveStrategy over OpenEvolve + a multi-backend compute pool." {
+        optunalib = softwareSystem "Optuna" "Third-party hyperparameter-optimization library: owns the study/sampler/storage. OptunaStrategy wraps create_study + optimize, resuming from SQLite." "External"
+
+        res = softwareSystem "ruthless-efficiency" "Optimisation/search substrate: pure core + RandomSearch + (1B) EvolveStrategy over OpenEvolve + a multi-backend compute pool + (2) OptunaStrategy." {
 
             cli = container "CLI" "Config-driven entry point: load config, resolve a trusted objective import-string, build the strategy, run it, print the report." "Python: ruthless.cli"
 
@@ -25,13 +27,14 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
             core = container "Core & Ports" "The pure hexagon: ports, value types, error taxonomy, penalty guards, parallel map, logging, the in-process backend, and remote-resolvability types." "Python: ruthless" {
                 errors = component "errors" "Taxonomy: Fatal/Transient evaluation errors; classify_metric." "Python"
                 result = component "result" "Candidate (hashable, + program), Evaluation, Result, Metrics." "Python"
-                objectivePort = component "objective (port)" "The Objective Protocol." "Python Protocol"
+                objectivePort = component "objective (port)" "Objective Protocol + CachedObjective (invariant-prep / per-trial-patch + patch_params)." "Python Protocol"
                 backendPort = component "backend (port)" "ComputeBackend Protocol (evaluate(candidate, objective, *, timeout)) + InProcessBackend." "Python"
                 strategyPort = component "strategy (port)" "Direction + the SearchStrategy Protocol." "Python Protocol"
                 remote = component "remote" "RemoteRef (install spec + entrypoint) + RemoteObjective Protocol — remote-execution opt-in." "Python"
                 guards = component "guards" "penalty_metrics — recorded penalty scores." "Python"
                 parallel = component "parallel" "map_work_units — intra-objective thread/process map." "Python"
                 logging = component "logging" "get_logger — namespaced ruthless.* loggers." "Python"
+                testing = component "testing" "assert_cache_equivalence — proves a CachedObjective's fast path == full recompute (consumer harness)." "Python"
 
                 objectivePort -> result "Uses Candidate / Metrics"
                 backendPort -> objectivePort "Calls evaluate (in-process)"
@@ -41,6 +44,7 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 remote -> result "References Candidate / Metrics"
                 guards -> result "Builds penalty Metrics"
                 errors -> result "References the Metrics scale"
+                testing -> objectivePort "Checks a CachedObjective"
             }
 
             backends = container "Backends [extra]" "Inter-candidate compute dispatch on the single port. Priority-ordered pool + adapters; raise Transient/Fatal (never a sentinel)." "Python: ruthless.backends" {
@@ -74,10 +78,19 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 evaluator -> backendPort "Dispatches via the port"
                 evostrategy -> strategyPort "Implements SearchStrategy"
             }
+
+            optuna = container "OptunaStrategy [extra]" "Resumable Bayesian/sampler calibration: wraps an Optuna study (create_study + optimize), warm-start enqueue, ParamSpec->suggest, SQLite resume; uses the CachedObjective fast path." "Python: ruthless.strategies.optuna_" {
+                optstrategy = component "strategy" "OptunaStrategy.run: study/resume (load_if_exists + remaining-trials), warm-start, _suggest, best/history from study.trials." "Python"
+
+                optstrategy -> strategyPort "Implements SearchStrategy"
+                optstrategy -> objectivePort "Fast path via CachedObjective; else the backend port"
+                optstrategy -> guards "Records penalty scores (degenerate trials)"
+            }
         }
 
         user -> random "Constructs and runs (primary API)" "Python"
         user -> evolve "Runs structural search" "Python"
+        user -> optuna "Calibrates parameters (Optuna)" "Python"
         user -> cli "Runs a search" "CLI"
 
         config -> configFile "Reads and parses" "PyYAML safe_load"
@@ -95,6 +108,10 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
         backends -> objective "Evaluates a candidate" "in-process or on a node"
         backends -> node "Ships candidate + runs the entrypoint" "ssh/scp or HF Jobs"
         node -> objective "Imports + runs train_and_evaluate"
+
+        optuna -> core "Uses ports, CachedObjective, errors, guards"
+        optuna -> optunalib "Drives the study" "create_study + optimize"
+        optuna -> objective "Evaluates a candidate / patch"
     }
 
     views {
@@ -119,6 +136,11 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
         }
 
         component evolve "EvolveComponents" {
+            include *
+            autoLayout
+        }
+
+        component optuna "OptunaComponents" {
             include *
             autoLayout
         }

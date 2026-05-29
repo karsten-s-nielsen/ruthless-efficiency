@@ -1,0 +1,45 @@
+"""Standing Optuna gate (spec C3): resumable study — no lost/duplicate trials + converges. NOT
+trajectory-identity (Optuna does not persist sampler RNG)."""
+
+from ruthless.backend import InProcessBackend
+from ruthless.config import OptunaConfig
+from ruthless.result import Candidate
+from ruthless.strategies.optuna_.strategy import OptunaStrategy
+
+
+class _Bowl:
+    def evaluate(self, candidate: Candidate):
+        x = candidate.params["x"]
+        return {"loss": (x - 2.0) ** 2}
+
+
+def _cfg(n, path):
+    return OptunaConfig.model_validate(
+        {
+            "kind": "optuna",
+            "metric": "loss",
+            "direction": "minimize",
+            "n_trials": n,
+            "param_space": {"x": {"kind": "float", "lo": -10.0, "hi": 10.0}},
+            "store": {"kind": "sqlite", "path": path},
+        }
+    )
+
+
+def test_resume_no_lost_or_duplicate_trials_and_converges(tmp_path):
+    import optuna
+
+    db = str(tmp_path / "study.db")
+    # Run the first half, then "kill" (discard the strategy) and resume to the full count.
+    r1 = OptunaStrategy(_cfg(20, db), seed=123).run(_Bowl(), backend=InProcessBackend())
+    assert r1.diagnostics["n_trials"] == 20 and len(r1.history) == 20
+    r2 = OptunaStrategy(_cfg(50, db), seed=123).run(_Bowl(), backend=InProcessBackend())
+    # monotone growth, no lost/dup: the resumed study has exactly n_trials total.
+    assert r2.diagnostics["n_trials"] == 50
+    # best + history span the WHOLE store, not just the 30 trials this process ran.
+    assert len(r2.history) == 50
+    # trial ids are contiguous 0..49 (no lost, no duplicate).
+    study = optuna.load_study(study_name=db, storage=f"sqlite:///{db}")
+    assert sorted(t.number for t in study.trials) == list(range(50))
+    # convergence within tolerance (NOT trajectory identity — Optuna RNG is not persisted).
+    assert r2.best is not None and abs(r2.best.candidate.params["x"] - 2.0) < 0.5

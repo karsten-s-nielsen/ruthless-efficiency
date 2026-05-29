@@ -1,12 +1,15 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at `0.1.0` (`0.x` — API unstable). **Phase 1A** delivered the core
+pluggable compute backends. Ships at `0.2.0` (`0.x` — API unstable). **Phase 1A** delivered the core
 ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
 optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
 per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
-adapter over OpenEvolve, + the AST sandbox). The lakehouse consumer migration (Plan 1B Part C) runs
-in the lakehouse repo, not here.
+adapter over OpenEvolve, + the AST sandbox). **Phase 2 (library side)** adds the `[optuna]` extra
+(`OptunaStrategy` — resumable Bayesian/sampler calibration; `CachedObjective` invariant-prep /
+per-trial-patch port + `ruthless.testing.assert_cache_equivalence`). The consumer migrations (lakehouse
+evolve, and **silly-kicks adopting `ruthless[optuna]`** for its own calibrations) run in those repos,
+not here.
 
 ## Architecture
 
@@ -93,10 +96,25 @@ determinism gate), pyyaml. Dev: pytest + hypothesis, ruff, pyright, import-linte
   `docker`, timeout + transient-retry contract, `RemoteObjective`/`RemoteRef`) and `[evolve]`
   (`EvolveStrategy` over OpenEvolve + the AST sandbox). **Part C (lakehouse consumer migration)** is
   pending and runs in the lakehouse repo (behind its hard-gate).
-- **Phase 2:** `OptunaStrategy`, `CachedObjective`, group-scoring.
+- **Phase 2 — library side (done):** `[optuna]` (`OptunaStrategy` — resumable SQLite study, warm-start,
+  C3 resume contract; `CachedObjective` + `ruthless.testing.assert_cache_equivalence`). Group-scoring
+  was **deferred** (consumer runs CV in its own `score_fn`). **Consumer adoption pending:** silly-kicks
+  installs `ruthless[optuna]` and owns its parameter objectives (the first real consumer); lakehouse
+  evolve + TC3 migrations later.
+
+## Key Phase-2 conventions
+
+- **`CachedObjective`** (core Protocol, no optuna dep): full `evaluate` + `prepare()` (invariant, once)
+  + `evaluate_patch(invariant, candidate)` + `patch_params`. `OptunaStrategy` uses the fast path and
+  rejects tuning any param not in `patch_params` (H1/M5). `assert_cache_equivalence` proves fast==full
+  and ENFORCES that candidates vary every patch_param.
+- **OptunaStrategy resume (C3):** no lost/dup trials + monotone growth + converge — NOT trajectory
+  identity (Optuna doesn't persist sampler RNG). `best`/`history` are reconstructed from `study.trials`
+  so they span the whole store on resume. SQLite store = single-process only.
 
 ## Reference docs
 
 - Spec: `docs/superpowers/specs/2026-05-28-optimization-engine-carveout-design.md`
 - Phase 1A plan: `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1a.md`
 - Phase 1B plan (rev 3): `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1b.md`
+- Phase 2 plan (rev 3): `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase2-library.md`
