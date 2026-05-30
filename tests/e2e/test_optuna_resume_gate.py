@@ -43,3 +43,22 @@ def test_resume_no_lost_or_duplicate_trials_and_converges(tmp_path):
     assert sorted(t.number for t in study.trials) == list(range(50))
     # convergence within tolerance (NOT trajectory identity — Optuna RNG is not persisted).
     assert r2.best is not None and abs(r2.best.candidate.params["x"] - 2.0) < 0.5
+
+
+def test_resume_with_warm_start_runs_exactly_n_trials_and_baseline_runs_once(tmp_path):
+    import optuna
+
+    db = str(tmp_path / "warm.db")
+    cfg1 = _cfg(5, db).model_copy(update={"warm_start": {"x": 7.5}})
+    cfg2 = _cfg(12, db).model_copy(update={"warm_start": {"x": 7.5}})
+    # Fresh warm-started study runs exactly n_trials (baseline = trial 0).
+    r1 = OptunaStrategy(cfg1, seed=7).run(_Bowl(), backend=InProcessBackend())
+    assert r1.diagnostics["n_trials"] == 5 and len(r1.history) == 5
+    assert r1.history[0].candidate.params["x"] == 7.5
+    # Resume: baseline must NOT be re-enqueued (n_existing != 0), total stays exact.
+    r2 = OptunaStrategy(cfg2, seed=7).run(_Bowl(), backend=InProcessBackend())
+    assert r2.diagnostics["n_trials"] == 12 and len(r2.history) == 12
+    study = optuna.load_study(study_name=db, storage=f"sqlite:///{db}")
+    assert sorted(t.number for t in study.trials) == list(range(12))
+    # the warm-start point appears exactly once across the whole store (not re-enqueued on resume).
+    assert sum(1 for t in study.trials if t.params.get("x") == 7.5) == 1

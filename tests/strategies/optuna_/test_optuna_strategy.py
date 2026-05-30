@@ -33,6 +33,23 @@ def test_warm_start_is_first_trial():
     assert r.history[0].candidate.params["x"] == 7.5  # enqueued baseline runs first (trial 0)
 
 
+def test_warm_start_runs_exactly_n_trials():
+    # Regression: a fresh warm-started study must run n_trials total (warm-start = the first trial),
+    # not n_trials-1. The enqueued WAITING baseline was double-counted — subtracted from the budget
+    # AND consumed by study.optimize. At n_trials=2 this collapsed to just the baseline.
+    for n in (2, 5):
+        r = OptunaStrategy(_cfg(n=n, warm_start={"x": 7.5}), seed=1).run(Quadratic(), backend=InProcessBackend())
+        assert r.diagnostics["n_trials"] == n, f"warm_start n_trials={n} ran {r.diagnostics['n_trials']}"
+        assert len(r.history) == n
+
+
+def test_no_warm_start_runs_exactly_n_trials():
+    for n in (2, 5):
+        r = OptunaStrategy(_cfg(n=n), seed=1).run(Quadratic(), backend=InProcessBackend())
+        assert r.diagnostics["n_trials"] == n
+        assert len(r.history) == n
+
+
 def test_int_and_choice_suggested():
     cfg = OptunaConfig.model_validate(
         {
