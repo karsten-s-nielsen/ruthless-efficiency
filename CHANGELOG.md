@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [0.2.1] - 2026-05-30
+
+### Fixed
+- `OptunaStrategy.run`: a fresh warm-started study now runs exactly `n_trials` trials (the warm-start
+  baseline is the first trial), instead of `n_trials - 1`. The enqueued `WAITING` baseline was
+  double-counted — subtracted from the remaining-trials budget *and* consumed by `study.optimize` —
+  so at `n_trials=2` the search collapsed to just the baseline with zero exploration. The
+  remaining-trials guard now reads the persisted trial count *before* `enqueue_trial`, preserving
+  resume semantics (persisted `COMPLETE`/`FAILED`/`PRUNED` still count; the baseline is not
+  re-enqueued on resume).
+
 ## [0.2.0] - 2026-05-28
 
 First published release. Ships the Phase 2 `[optuna]` extra alongside the Phase 1A/1B core, and folds

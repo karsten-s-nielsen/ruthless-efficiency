@@ -70,7 +70,12 @@ class OptunaStrategy:
             direction=direction,
             load_if_exists=True,
         )
-        if cfg.warm_start and len(study.trials) == 0:  # enqueue the baseline ONLY on a fresh study
+        # Persisted-trial count taken BEFORE enqueue: on a fresh study this is 0; on resume it is the
+        # count already in the store. `remaining` must subtract this — NOT the post-enqueue count —
+        # otherwise the enqueued WAITING baseline is double-counted (subtracted from the budget AND
+        # consumed by study.optimize, which prioritises WAITING trials), running only n_trials-1.
+        n_existing = len(study.trials)
+        if cfg.warm_start and n_existing == 0:  # enqueue the baseline ONLY on a fresh study
             study.enqueue_trial(cfg.warm_start)
 
         def _objective(trial: Any) -> float:
@@ -89,7 +94,7 @@ class OptunaStrategy:
                 trial.set_user_attr(k, v)  # persisted -> lets resume reconstruct history (B1)
             return metrics[cfg.metric]
 
-        remaining = max(0, cfg.n_trials - len(study.trials))
+        remaining = max(0, cfg.n_trials - n_existing)
         if remaining:
             study.optimize(_objective, n_trials=remaining)
 
@@ -104,8 +109,8 @@ class OptunaStrategy:
 
         # Single post-optimize snapshot reused for both the COMPLETE filter and the total count (each
         # `study.trials`/`get_trials` is a storage round-trip; on a resumed SQLite study that reloads
-        # every persisted trial). NOTE: the two PRE-optimize reads are deliberately NOT collapsed —
-        # they straddle `enqueue_trial`, so reading once would change the warm-start trial count.
+        # every persisted trial). The pre-optimize count (`n_existing`) is read once, before enqueue,
+        # so the warm-start baseline counts as a budgeted trial rather than being subtracted twice.
         all_trials = study.get_trials(deepcopy=False)
         completed = [t for t in all_trials if t.state == TrialState.COMPLETE]
         history = [_to_eval(t) for t in completed]

@@ -34,7 +34,7 @@ from ruthless.strategies.random_.strategy import RandomSearchStrategy
 from ruthless.strategy import Direction, SearchStrategy
 from ruthless.testing import assert_cache_equivalence
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "CachedObjective",
