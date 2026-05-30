@@ -1,5 +1,19 @@
 name: CI
-on: [push, pull_request]
+# push scoped to branches (not tags): a v* tag push is handled by publish.yml, and limiting
+# push to `main` avoids the same-repo double-run (push + pull_request both firing on a PR branch).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Supersede in-flight runs for the same ref so a new push cancels the stale run instead of queueing.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

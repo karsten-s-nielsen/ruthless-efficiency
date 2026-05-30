@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
 
+# Least privilege: build only reads the repo. The publish job re-declares id-token: write below
+# (its only elevated scope) for OIDC trusted publishing.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
