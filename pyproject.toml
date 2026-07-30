@@ -34,10 +34,14 @@ path = "ruthless/_version.py"
 packages = ["ruthless"]
 
 [tool.hatch.build.targets.sdist]
-# Keep internal dev docs out of the published sdist: the planning docs reference sibling repos and
-# the dev process, and bloat the package. The user-facing docs (README, LICENSE, NOTICE, CHANGELOG,
-# CONTRIBUTING, SECURITY, CODE_OF_CONDUCT) and the design ADR/C4 still ship.
+# Keep internal dev docs and repo infrastructure out of the published sdist: the planning docs
+# reference sibling repos and the dev process, and CI/issue-template config is of no use to anyone
+# installing the package. The user-facing docs (README, LICENSE, NOTICE, CHANGELOG, CONTRIBUTING,
+# SECURITY, CODE_OF_CONDUCT) and the design ADR/C4 still ship.
 exclude = [
+    # CI workflows, dependabot config, CODEOWNERS, PR/issue templates. Excluding these also makes
+    # "a workflow-only change does not alter the package" true rather than nearly-true.
+    "/.github",
     "/CLAUDE.md",
     "/docs/superpowers",
     "/docs/audits",

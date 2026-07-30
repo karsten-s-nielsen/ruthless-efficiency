@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [Unreleased]
+
+### Internal
+- The published sdist no longer ships `/.github` — CI workflows, `dependabot.yml`, `CODEOWNERS`, and the
+  PR/issue templates (8 files). They are development infrastructure with no use to anyone installing the
+  package, and the same reasoning already excluded `CLAUDE.md` and the internal planning docs. Excluding
+  them also makes "a workflow-only change does not alter the published package" true rather than
+  nearly-true. The wheel was never affected; user-facing docs, the ADRs, and the C4 diagram still ship.
+
 ## [0.3.0] - 2026-07-30
 
 Minor bump rather than patch: `map_work_units` changes which exception a failing map raises, and under
