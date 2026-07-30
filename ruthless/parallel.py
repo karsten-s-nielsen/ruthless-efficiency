@@ -43,7 +43,17 @@ class WorkUnitMapError(OptimizationError):
 
     NOTE: this is not the only exception ``map_work_units`` can raise — a dead pool propagates
     ``concurrent.futures.BrokenExecutor`` unwrapped, because that voids the attempted-every-unit
-    guarantee and so cannot honestly be reported as a per-unit failure."""
+    guarantee and so cannot honestly be reported as a per-unit failure.
+
+    TYPING of ``results``: it is ``list[object | None]`` and cannot be narrower. ``except
+    WorkUnitMapError as exc`` erases any type parameter, so making this class generic would not give a
+    caller back the element type. If you want typed partial results, use ``on_error="collect"``, which
+    returns ``list[R | None]`` directly; if you prefer to catch, cast explicitly::
+
+        except WorkUnitMapError as exc:
+            partial = cast("list[int | None]", exc.results)
+
+    Both routes return identical values."""
 
     def __init__(self, failures: Sequence[UnitFailure], results: Sequence[object | None], n_items: int) -> None:
         self.failures: list[UnitFailure] = list(failures)

@@ -9,15 +9,27 @@ Existing callers: `strategies/evolve_/strategy.py` (seed-result cache identity).
 
 from __future__ import annotations
 
+import datetime as dt
+import enum
 import hashlib
 import json
 from collections.abc import Mapping
+from pathlib import PurePath
 
 from pydantic import BaseModel
 
 
 def _tag(value: object) -> object:
-    """Type-tagged, JSON-serialisable form of `value`. Structural, so no separator can collide."""
+    """Type-tagged, JSON-serialisable form of `value`. Structural, so no separator can collide.
+
+    Branch order is load-bearing wherever one type is a SUBCLASS of another: enum before bool/int/str
+    (an IntEnum/StrEnum member is also an int/str), bool before int (isinstance(True, int) is True), and
+    datetime before date (datetime subclasses date). Getting any of these wrong silently collides the
+    subclass with its base."""
+    if isinstance(value, enum.Enum):
+        # Tag the enum CLASS as well as the value, so two enums sharing a value cannot collide. First,
+        # because an IntEnum/StrEnum member would otherwise be captured by the int/str branch below.
+        return ["enum", type(value).__name__, _tag(value.value)]
     if isinstance(value, bool):  # MUST precede int - isinstance(True, int) is True
         return ["bool", value]
     if isinstance(value, int):
@@ -28,6 +40,15 @@ def _tag(value: object) -> object:
         return ["str", value]
     if value is None:
         return ["none", None]
+    if isinstance(value, PurePath):
+        # POSIX form, so the same logical path digests the same whichever OS produced it.
+        return ["path", value.as_posix()]
+    if isinstance(value, dt.datetime):
+        # MUST precede date - datetime is a subclass of date (the same trap as bool-before-int). A naive
+        # and an aware instant digest differently, which is the fail-closed direction.
+        return ["datetime", value.isoformat()]
+    if isinstance(value, dt.date):
+        return ["date", value.isoformat()]
     if isinstance(value, Mapping):
         # Keys go through _canon too: a bare str(k) collides {1: x} with {"1": x}.
         return ["map", sorted((_canon(k), _tag(v)) for k, v in value.items())]

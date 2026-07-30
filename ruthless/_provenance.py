@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -51,8 +52,13 @@ def _run_git(args: list[str], repo_root: Path) -> str | None:
     return proc.stdout
 
 
+@cache
 def _repo_tracks_module(module_file: Path) -> bool:
     """True only if the enclosing git repo TRACKS `module_file` as source.
+
+    Cached: whether a repo tracks a given source file is static for the life of a process, so this probe
+    runs once instead of once per `run()`. The tree STATE is deliberately NOT cached — that changes while
+    a process runs, and a stale "clean" is exactly the false provenance this module exists to prevent.
 
     Separates "ruthless's own checkout" (including `pip install -e`, where `__file__` still points at the
     source) from "somebody's venv that happens to sit inside their repo". See the module docstring for the
