@@ -37,7 +37,10 @@ def render_summary_md(result: Result) -> str:
     """Render a ``Result`` as a human-readable Markdown summary **string**.
 
     Produces a top-level heading plus the best metrics/params (when present), the trial count, and
-    provenance. For the full machine-readable surface use :func:`render_json`."""
+    provenance rendered as one ``- key: value`` line per entry. A single-line dict repr grows past
+    terminal width as keys are added and buries ``ruthless_git_state`` — precisely the field that must
+    not be buried, since a commit with no tree state is false provenance. For the full machine-readable
+    surface use :func:`render_json`, which is unchanged and serialises the dict faithfully."""
     lines = ["# Ruthless Efficiency — Run Summary", ""]
     if result.best:
         lines += [
@@ -45,5 +48,6 @@ def render_summary_md(result: Result) -> str:
             f"**Best params:** `{dict(result.best.candidate.params)}`",
             "",
         ]
-    lines += [f"**Trials:** {len(result.history)}", f"**Provenance:** `{result.provenance}`"]
+    lines += [f"**Trials:** {len(result.history)}", "", "**Provenance:**"]
+    lines += [f"- {k}: {v}" for k, v in result.provenance.items()] or ["- (none)"]
     return "\n".join(lines)

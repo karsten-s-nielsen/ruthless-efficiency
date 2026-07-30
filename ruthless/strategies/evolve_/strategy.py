@@ -15,7 +15,6 @@ imports `create_backend` at runtime in the worker subprocess (not a static impor
 from __future__ import annotations
 
 import concurrent.futures
-import hashlib
 import importlib
 import json
 import os
@@ -25,8 +24,10 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+from ruthless._fingerprint import fingerprint_model
 from ruthless._io import program_to_path
 from ruthless._logging import get_logger
+from ruthless._provenance import code_identity
 from ruthless.backend import ComputeBackend
 from ruthless.config import EvolveConfig
 from ruthless.errors import FatalEvaluationError
@@ -127,9 +128,29 @@ def _discover_seed_programs(seed_programs_dir: str) -> list[Path]:
     return programs
 
 
+# EvalConfig fields deliberately EXCLUDED from seed-cache identity, with the reason for each.
+# Rule: declare what determines the cached artifact's CONTENT, not what CONSUMES it.
+_SEED_CACHE_EXCLUDE = frozenset(
+    {
+        # An infra budget, not a determinant of a seed's metrics. A truncated run maps to the worst-score
+        # sentinel (combined_score=0) and is WRITTEN like any other result - _eval_one writes
+        # unconditionally - but is never READ BACK, because _load_cached_seeds accepts only
+        # combined_score > 0.0. That read filter is the ONLY thing making this exclusion safe; it is
+        # pinned by test_a_zero_score_seed_result_is_never_cache_readable. Relax it and this exclusion
+        # becomes silently unsafe.
+        "timeout_seconds",
+    }
+)
+
+
 def _eval_fingerprint(cfg: EvolveConfig) -> str:
-    """Deterministic hash of the eval params that affect seed results (epochs/seed; no dataset)."""
-    return hashlib.sha256(f"{cfg.evaluation.epochs}:{cfg.evaluation.seed}".encode()).hexdigest()[:16]
+    """Deterministic identity of the eval params that determine seed-result CONTENT.
+
+    Delegates to the shared core primitive, which covers EVERY EvalConfig field except
+    `_SEED_CACHE_EXCLUDE`, so a new field is picked up automatically (fail-closed - see
+    `ruthless._fingerprint.fingerprint_model`). The policy of WHAT evolve excludes stays here; the
+    hashing lives in core."""
+    return fingerprint_model(cfg.evaluation, exclude=_SEED_CACHE_EXCLUDE)
 
 
 def _load_cached_seeds(
@@ -387,5 +408,6 @@ class EvolveStrategy:
                 "iterations": cfg.evolution.iterations,
                 "num_islands": cfg.evolution.num_islands,
                 "checkpoint_dir": str(self._results_dir),
+                **code_identity(),
             },
         )

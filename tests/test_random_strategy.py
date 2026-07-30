@@ -36,6 +36,14 @@ def test_finds_minimum_and_ignores_nan_diagnostic():
     assert r.best is not None and abs(r.best.candidate.params["x"] - 3.0) < 0.5 and len(r.history) == 200
 
 
+def test_result_provenance_carries_code_identity():
+    """Captured at RUN time, not render time: render_json may be called later from a different tree."""
+    r = RandomSearchStrategy(_cfg(5), seed=42).run(Quadratic(), backend=InProcessBackend())
+    assert r.provenance["ruthless_version"]
+    assert r.provenance["ruthless_git_state"] in {"clean", "dirty", "unknown"}
+    assert r.provenance["strategy"] == "random"  # pre-existing keys survive the spread
+
+
 def test_deterministic_under_fixed_seed():
     a = RandomSearchStrategy(_cfg(50), seed=42).run(Quadratic(), backend=InProcessBackend())
     b = RandomSearchStrategy(_cfg(50), seed=42).run(Quadratic(), backend=InProcessBackend())

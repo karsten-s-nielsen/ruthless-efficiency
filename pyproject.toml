@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ruthless-efficiency"
-version = "0.2.1"
+dynamic = ["version"]  # read from ruthless/_version.py — see [tool.hatch.version]
 description = "Ruthless Efficiency — a general optimisation/search substrate (pluggable strategies + compute backends)."
 requires-python = ">=3.10"
 readme = "README.md"
@@ -22,6 +22,13 @@ dev = ["pytest>=8", "pytest-benchmark>=4", "hypothesis>=6", "ruff>=0.6", "pyrigh
 
 [project.scripts]
 ruthless = "ruthless.cli:main"
+
+[tool.hatch.version]
+# SINGLE source of truth for the version. `[project] version` used to duplicate the runtime
+# `__version__` literal with nothing enforcing agreement — drift meant wheel metadata disagreeing with
+# `ruthless.__version__`, and (since ADR-002) a wrong version stamped into every Result.provenance.
+# Deleting the duplication beats testing for it. Bump ruthless/_version.py; everything else follows.
+path = "ruthless/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ruthless"]

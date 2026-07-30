@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from ruthless._logging import get_logger
+from ruthless._provenance import code_identity
 from ruthless.backend import ComputeBackend
 from ruthless.config import Choice, FloatRange, IntRange, OptunaConfig, ParamSpec
 from ruthless.errors import classify_metric
@@ -125,5 +126,6 @@ class OptunaStrategy:
                 "direction": direction,
                 "storage": storage,
                 "study_name": study.study_name,
+                **code_identity(),
             },
         )

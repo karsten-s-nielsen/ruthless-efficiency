@@ -5,6 +5,68 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [Unreleased]
+
+### Added
+- Private core cache-identity primitive (`ruthless._fingerprint`): a type-tagged, structural,
+  order-insensitive, fail-closed digest over declared inputs, plus `fingerprint_model(model, exclude=...)`
+  whose invalidation scope is a declared EXCLUSION set. A field added to a model later is included by
+  default, so the failure mode of forgetting to revisit an exclusion is an unnecessary cache miss
+  (recompute) rather than a stale hit (wrong). Naming a non-existent field in `exclude` raises, closing
+  the renamed-field gap. Private and absent from `ruthless.__all__` — no public API commitment.
+- `Result.provenance` now carries ruthless's own code identity: `ruthless_version`,
+  `ruthless_git_commit` and `ruthless_git_state` (`"clean"` | `"dirty"` | `"unknown"`), captured at run
+  time. A commit is never reported without a state, and an absent/failing git reports `"unknown"` rather
+  than degrading to `"clean"` — a bare SHA from a dirty tree is verifiable-looking false provenance,
+  which is worse than recording nothing. Keys are `ruthless_`-prefixed because this identifies ruthless's
+  tree, not the consumer's objective code; the enclosing repo must be proved to track this module as
+  source, so a wheel installed into a project-local venv reports `"unknown"` instead of stamping the
+  consumer's commit.
+
+### Changed (BREAKING)
+- `ruthless.parallel.map_work_units` now has a real error model. Previously it raised the first unit
+  exception by input order, **discarded every completed result**, and the set of units actually attempted
+  depended on `workers` — a documented performance knob silently deciding which of the caller's side
+  effects happened. Under a parallel executor it also could not fail fast at all: `shutdown(wait=True)`
+  meant the exception surfaced only after the whole map finished (measured: a fault at 0.01s surfaced at
+  2.03s with 7 of 8 units run and all results thrown away).
+  - Every unit is now **always attempted**, at every `workers` value and under both executors.
+  - Unit failures aggregate into a new `WorkUnitMapError` (a sibling of `TransientEvaluationError` /
+    `FatalEvaluationError` under `OptimizationError`, so `BackendPool` can never retry it) carrying
+    every `UnitFailure` **and** the partial results.
+  - New `on_error="collect"` returns `(results, failures)` instead of raising, with `None` in each
+    failed slot. A dead pool still propagates `concurrent.futures.BrokenExecutor` unwrapped.
+  - **Migration:** replace `except ValueError` (or whatever your unit raised) around `map_work_units`
+    with `from ruthless.parallel import WorkUnitMapError` / `except WorkUnitMapError` and read
+    `exc.failures[i].exception`, or switch to `on_error="collect"`. Note a systematic failure now costs a
+    full pass rather than short-circuiting.
+
+### Changed
+- `EvolveStrategy`'s seed-result cache fingerprint now delegates to `ruthless._fingerprint`. The set of
+  inputs it covers is unchanged (`epochs` + `seed`; `timeout_seconds` remains excluded, and that
+  exclusion's load-bearing read filter is now pinned by a test), but the **digest value changes**, so
+  existing on-disk seed caches miss once and recompute. Benign, and in the fail-closed direction. The old
+  hand-rolled `sha256(f"{epochs}:{seed}")` used untagged string concatenation over a `:` separator, which
+  was collision-free only because both fields are ints.
+- `render_summary_md` renders provenance as one `- key: value` line per entry instead of a single-line
+  dict repr, so `ruthless_git_state` stays visible as the dict grows. The machine-readable surface
+  (`render_json`) is unchanged; the docstring at `report.py:40` already directs machine consumers there.
+
+### Internal
+- The `__version__` literal moved from `ruthless/__init__.py` to a new `ruthless/_version.py`, re-exported
+  from the package root — `ruthless.__version__` is unchanged for all callers. Required because
+  `__init__.py` is the curated public API and therefore imports a strategy, so a core module reading the
+  version from the package root transitively imported `ruthless.strategies` and broke the
+  `core-isolation` import-linter contract.
+- **The version is now single-sourced.** `pyproject.toml` declares `dynamic = ["version"]` with
+  `[tool.hatch.version] path = "ruthless/_version.py"`, so hatchling reads the same literal the runtime
+  does. Previously the packaging version and `__version__` were two independent literals with nothing
+  enforcing agreement; drift meant wheel metadata disagreeing with `ruthless.__version__` — and, now that
+  provenance stamps `ruthless_version` into every `Result`, a wrong version recorded in result artifacts.
+  Deleting the duplication beats testing for it. **Release note:** bump `ruthless/_version.py` and the
+  packaging version follows; the remaining hand-edits are the `CLAUDE.md` "Ships at" line and the
+  CHANGELOG section header.
+
 ## [0.2.1] - 2026-05-30
 
 ### Fixed

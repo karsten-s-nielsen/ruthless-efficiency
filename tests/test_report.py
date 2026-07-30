@@ -22,3 +22,31 @@ def test_render_json_roundtrips():
 def test_render_summary_md():
     md = render_summary_md(_result())
     assert md.startswith("# ") and "0.0001" in md and "random" in md
+
+
+def test_summary_md_renders_provenance_one_key_per_line():
+    """spec §8.1: a growing one-line dict repr buries `ruthless_git_state`, which is precisely the field
+    that must not be buried (a SHA with no state is false provenance). Hyrum's Law is satisfied because
+    report.py's own docstring already directs machine consumers to render_json."""
+    result = Result(
+        best=None,
+        history=[],
+        provenance={"strategy": "random", "ruthless_git_commit": "a" * 40, "ruthless_git_state": "dirty"},
+    )
+    md = render_summary_md(result)
+    assert "- ruthless_git_state: dirty" in md
+    assert f"- ruthless_git_commit: {'a' * 40}" in md
+    assert "{'strategy'" not in md  # no bare dict repr
+
+
+def test_render_json_still_serialises_provenance_as_a_dict():
+    """The machine-readable surface is UNCHANGED - that is what makes the Markdown reformat safe."""
+    result = Result(best=None, history=[], provenance={"strategy": "random", "ruthless_git_state": "clean"})
+    assert json.loads(render_json(result))["provenance"] == {
+        "strategy": "random",
+        "ruthless_git_state": "clean",
+    }
+
+
+def test_summary_md_handles_empty_provenance():
+    assert "- (none)" in render_summary_md(Result(best=None, history=[]))
