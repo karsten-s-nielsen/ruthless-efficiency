@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 
 from ruthless._logging import get_logger
+from ruthless._provenance import code_identity
 from ruthless.backend import ComputeBackend
 from ruthless.config import Choice, FloatRange, IntRange, ParamSpec, RandomConfig
 from ruthless.errors import classify_metric
@@ -67,5 +68,10 @@ class RandomSearchStrategy:
             best=best,
             history=history,
             diagnostics={"n_trials": cfg.n_trials},
-            provenance={"strategy": "random", "seed": self._seed, "direction": cfg.direction.value},
+            provenance={
+                "strategy": "random",
+                "seed": self._seed,
+                "direction": cfg.direction.value,
+                **code_identity(),
+            },
         )

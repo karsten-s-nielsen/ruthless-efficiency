@@ -9,6 +9,7 @@ imported from their own namespaces (`ruthless.strategies.optuna_`, `ruthless.str
 
 from __future__ import annotations
 
+from ruthless._version import __version__ as __version__  # re-export; not in __all__ (dunder)
 from ruthless.backend import ComputeBackend, InProcessBackend
 from ruthless.config import (
     Choice,
@@ -33,8 +34,6 @@ from ruthless.result import Candidate, Evaluation, Metrics, Result
 from ruthless.strategies.random_.strategy import RandomSearchStrategy
 from ruthless.strategy import Direction, SearchStrategy
 from ruthless.testing import assert_cache_equivalence
-
-__version__ = "0.2.1"
 
 __all__ = [
     "CachedObjective",

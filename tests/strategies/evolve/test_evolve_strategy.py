@@ -13,6 +13,7 @@ from ruthless.strategies.evolve_.strategy import (
     _resolve_hook,
     _translate_to_openevolve_config,
 )
+from ruthless.wire import worst_score_metrics
 
 
 def _cfg(seed_dir, **over):
@@ -147,3 +148,43 @@ def test_run_seed_cache_resume_skips_cached(seed_dir, tmp_path, monkeypatch):
     strategy = EvolveStrategy(cfg, results_dir=out, resume=True)
     strategy.run(_remote_objective_from_config(cfg), backend=_CountingBackend())
     assert calls["n"] == 0  # the only seed was cached -> backend never called
+
+
+# ---- seed-cache identity: declared exclusion scope (spec §3) ----
+
+
+def test_eval_fingerprint_tracks_epochs_and_seed_but_not_timeout(seed_dir):
+    """Pins evolve's DECLARED cache-identity scope (spec §3)."""
+    base = strat._eval_fingerprint(_cfg(seed_dir))
+    assert strat._eval_fingerprint(_cfg(seed_dir, evaluation={"epochs": 99, "seed": 7})) != base
+    assert strat._eval_fingerprint(_cfg(seed_dir, evaluation={"epochs": 3, "seed": 99})) != base
+    # timeout_seconds is an infra budget, not a determinant of a seed's metrics -> excluded.
+    assert strat._eval_fingerprint(_cfg(seed_dir, evaluation={"epochs": 3, "seed": 7, "timeout_seconds": 1})) == base
+
+
+def test_a_zero_score_seed_result_is_never_cache_readable(seed_dir, tmp_path):
+    """Load-bearing for _SEED_CACHE_EXCLUDE's `timeout_seconds` entry (spec §3.2). A truncated run maps
+    to the worst-score sentinel (combined_score=0), is WRITTEN to the seed-results dir like any other
+    result (_eval_one writes unconditionally), and this read filter is the ONLY thing that stops it being
+    reused. Relax it and the timeout exclusion becomes silently unsafe."""
+    cfg = _cfg(seed_dir)
+    fp = strat._eval_fingerprint(cfg)
+    results_dir = tmp_path / "seed_results"
+    results_dir.mkdir(parents=True)
+    (results_dir / "seed0.json").write_text(
+        json.dumps({"program": "seed0.py", "fingerprint": fp, "metrics": worst_score_metrics()})
+    )
+    cached = strat._load_cached_seeds(results_dir, [seed_dir / "seed0.py"], fp)
+    assert cached == {}, "a combined_score=0 sentinel must never be readable from the seed cache"
+
+
+def test_a_positive_score_seed_result_is_cache_readable(seed_dir, tmp_path):
+    """The control for the test above: the filter rejects sentinels, not everything."""
+    cfg = _cfg(seed_dir)
+    fp = strat._eval_fingerprint(cfg)
+    results_dir = tmp_path / "seed_results"
+    results_dir.mkdir(parents=True)
+    (results_dir / "seed0.json").write_text(
+        json.dumps({"program": "seed0.py", "fingerprint": fp, "metrics": {"combined_score": 0.5}})
+    )
+    assert strat._load_cached_seeds(results_dir, [seed_dir / "seed0.py"], fp) == {"seed0": {"combined_score": 0.5}}

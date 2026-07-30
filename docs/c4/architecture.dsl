@@ -24,7 +24,7 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
 
             report = container "Reporting" "Renders a Result to machine JSON and a human Markdown summary." "Python: ruthless.report"
 
-            core = container "Core & Ports" "The pure hexagon: a curated public API (ruthless.__all__) over ports, value types, error taxonomy, penalty guards, parallel map, logging, the in-process backend, remote-resolvability types, the cross-wire contract, and a shared temp-file helper." "Python: ruthless" {
+            core = container "Core & Ports" "The pure hexagon: a curated public API (ruthless.__all__) over ports, value types, error taxonomy, penalty guards, parallel map, cache identity, code provenance, logging, the in-process backend, remote-resolvability types, the cross-wire contract, and a shared temp-file helper." "Python: ruthless" {
                 errors = component "errors" "Taxonomy: Fatal/Transient evaluation errors; classify_metric." "Python"
                 result = component "result" "Candidate (hashable, read-only params, + program), Evaluation, Result, Metrics." "Python"
                 wire = component "wire" "Cross-wire failure/score contract: combined_score/error/_error_text keys, worst-score sentinel, surfaced-traceback limit." "Python"
@@ -34,7 +34,10 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 strategyPort = component "strategy (port)" "Direction + the SearchStrategy Protocol." "Python Protocol"
                 remote = component "remote" "RemoteRef (install spec + entrypoint) + RemoteObjective Protocol — remote-execution opt-in." "Python"
                 guards = component "guards" "penalty_metrics — recorded penalty scores." "Python"
-                parallel = component "parallel" "map_work_units — intra-objective thread/process map." "Python"
+                parallel = component "parallel" "map_work_units — intra-objective thread/process map. Every unit is always attempted (workers never changes which units ran); unit failures aggregate into WorkUnitMapError or return via on_error='collect'; a dead pool propagates BrokenExecutor." "Python"
+                fingerprint = component "_fingerprint" "Private cache-identity primitive: type-tagged (keys AND values), structural, order-insensitive, fail-closed digest; fingerprint_model(exclude=...) makes a cache's invalidation scope a declared exclusion set (ADR-002)." "Python"
+                provenance = component "_provenance" "Private code identity for Result.provenance: ruthless_version/_git_commit/_git_state. Never a SHA without a tree state; proves the enclosing repo TRACKS this module, so a wheel in a consumer's venv reports 'unknown' rather than the consumer's commit (ADR-002)." "Python: git CLI"
+                version = component "_version" "The __version__ literal, in its own module so the pure core can read it without importing the package root (which imports a strategy)." "Python"
                 logging = component "logging" "get_logger — namespaced ruthless.* loggers." "Python"
                 testing = component "testing" "assert_cache_equivalence — proves a CachedObjective's fast path == full recompute (consumer harness)." "Python"
 
@@ -48,6 +51,10 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 errors -> result "References the Metrics scale"
                 testing -> objectivePort "Checks a CachedObjective"
                 io -> result "Reads Candidate.program"
+                parallel -> errors "Raises WorkUnitMapError (an OptimizationError sibling, so the pool cannot retry it)"
+                provenance -> version "Reads __version__"
+                provenance -> logging "Warns when the tree state is unknown"
+                provenance -> result "Populates Result.provenance"
             }
 
             backends = container "Backends [extra]" "Inter-candidate compute dispatch on the single port. Priority-ordered pool + adapters; raise Transient/Fatal (never a sentinel)." "Python: ruthless.backends" {
@@ -80,6 +87,8 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 evaluator -> sandbox "Gates candidate code"
                 evaluator -> backendPort "Dispatches via the port"
                 evostrategy -> strategyPort "Implements SearchStrategy"
+                evostrategy -> fingerprint "Seed-cache identity (fingerprint_model, timeout_seconds excluded)"
+                evostrategy -> provenance "Stamps code identity into the Result"
             }
 
             optuna = container "OptunaStrategy [extra]" "Resumable Bayesian/sampler calibration: wraps an Optuna study (create_study + optimize), warm-start enqueue, ParamSpec->suggest, SQLite resume; uses the CachedObjective fast path." "Python: ruthless.strategies.optuna_" {
@@ -88,6 +97,7 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 optstrategy -> strategyPort "Implements SearchStrategy"
                 optstrategy -> objectivePort "Fast path via CachedObjective; else the backend port"
                 optstrategy -> guards "Records penalty scores (degenerate trials)"
+                optstrategy -> provenance "Stamps code identity into the Result"
             }
         }
 

@@ -1,7 +1,7 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at `0.2.1` (`0.x` — API unstable). **Phase 1A** delivered the core
+pluggable compute backends. Ships at `0.3.0` (`0.x` — API unstable). **Phase 1A** delivered the core
 ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
 optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
 per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
@@ -54,6 +54,33 @@ not here.
 - **`Candidate` is hashable** (frozen, order-independent `__eq__`/`__hash__` over its params) so it
   can serve as a cache/dedup key. Do not mutate `params` after construction.
 - **`Result` is treat-as-immutable once returned** by `SearchStrategy.run`.
+- **`map_work_units` always attempts EVERY unit.** `workers` is a speed knob and must never change
+  *which* units ran — work units are consumer code with consumer side effects. Unit failures aggregate
+  into `WorkUnitMapError` (an `OptimizationError` sibling of `Transient`/`Fatal`, deliberately outside
+  the evaluation taxonomy so `BackendPool` cannot retry it) carrying every failure **and** the partial
+  results; `on_error="collect"` returns them instead. A dead pool propagates `BrokenExecutor`
+  unwrapped, because that voids the attempted-every-unit guarantee. Cost: a systematic failure now
+  costs a full pass (the serial path no longer short-circuits).
+- **Cache identity is a declared EXCLUSION set, never an inclusion list.** `ruthless._fingerprint`
+  (private core) is the one hashing implementation: type-tagged in both the **key** and value position,
+  structural rather than concatenated, order-insensitive, and fail-closed on unknown types.
+  `fingerprint_model(model, exclude=...)` covers every model field except the named exclusions, so a
+  field added later is included automatically — the failure mode of forgetting becomes an unnecessary
+  cache *miss* (recompute, safe), never a stale *hit* (wrong). Naming a non-existent field raises. Each
+  exclusion carries a comment naming the test that makes it safe (see evolve's `_SEED_CACHE_EXCLUDE`).
+- **Provenance never overclaims.** `ruthless._provenance.code_identity()` never reports a commit
+  without a tree state, and never degrades to `"clean"` — a bare SHA from a dirty tree is
+  verifiable-looking *false* provenance, worse than recording nothing. Keys are `ruthless_`-prefixed
+  because they identify ruthless's tree, not the consumer's objective, and the enclosing repo must be
+  proved to **track** this module (so a wheel in a consumer's venv reports `"unknown"` rather than the
+  consumer's commit). Uses the `git` CLI opportunistically — absent git is a supported state, not an
+  error.
+- **`__version__` lives in `ruthless/_version.py`** and is the version's SINGLE source. It cannot live in
+  `__init__.py`: that module is the curated public API and imports a strategy, so a core module reading
+  the version from it would break the `core-isolation` contract. `pyproject.toml` declares
+  `dynamic = ["version"]` and hatchling reads this file (`[tool.hatch.version] path`), so packaging and
+  runtime cannot drift. **On release, bump this one line**; the only remaining hand-edits are the
+  "Ships at" line below and the CHANGELOG section header.
 - **Config is a discriminated-union surface.** `RuthlessConfig` carries a discriminated *strategy*
   union and a discriminated *param-space* union (`FloatRange` / `IntRange` / `Choice`, with a `log`
   flag on floats). Only `random` is registered in Phase 1A; evolve/optuna extend the union later
@@ -91,6 +118,10 @@ uv run pytest -v
 Python ≥3.10 (CI on 3.10), pydantic v2, numpy (`<3`, pinned for RNG-stream stability of the
 determinism gate), pyyaml. Dev: pytest + hypothesis, ruff, pyright, import-linter, hatchling.
 
+The only external *tool* the core touches is the `git` CLI, used opportunistically by
+`ruthless._provenance` — absent or failing git is a supported state (`"unknown"`), never an error. No
+Python dependency is added for it.
+
 ## Scope map
 
 - **Phase 1A (done):** core ports + value types + config + reporting + observability +
@@ -121,3 +152,12 @@ determinism gate), pyyaml. Dev: pytest + hypothesis, ruff, pyright, import-linte
 - Phase 1A plan: `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1a.md`
 - Phase 1B plan (rev 3): `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase1b.md`
 - Phase 2 plan (rev 3): `docs/superpowers/plans/2026-05-28-ruthless-efficiency-phase2-library.md`
+- Work-unit error model + cache identity (rev 3):
+  `docs/superpowers/specs/2026-07-29-parallel-error-model-and-cache-identity.md` and
+  `docs/superpowers/plans/2026-07-29-parallel-error-model-and-cache-identity-plan.md`
+
+## Architecture decisions
+
+- `docs/adr/ADR-001-ast-sandbox-security-model.md` — AST allowlist for evolve Level-2 code evolution.
+- `docs/adr/ADR-002-cache-identity-and-code-provenance.md` — why cache identity is a private core
+  primitive with an exclusion-set scope, and why provenance never emits a SHA without a tree state.
