@@ -7,6 +7,27 @@ API may change between minor versions until `1.0`).
 
 ## [Unreleased]
 
+### Fixed
+- `ruthless._fingerprint` now handles `Path`, `Enum`, `datetime`, and `date` instead of raising. A config
+  model gaining a field of any of those types made `fingerprint_model` raise `TypeError` **mid-run**
+  rather than degrade — reachable today, since `model_dump()` yields live `Path`/`Enum` objects. Each is
+  type-tagged: paths by POSIX form (so the same logical path digests identically across OSes), enums by
+  class **and** value (so two enums sharing a value cannot collide), datetimes/dates by ISO form.
+  - The `enum` branch is checked **first** and `datetime` **before** `date`, because an `IntEnum`/`StrEnum`
+    member is also an `int`/`str` and `datetime` subclasses `date` — the same subclass-shadowing trap as
+    `bool` before `int`. Pinned by tests; a wrong branch order silently collides the subclass with its base.
+
+### Changed
+- `ruthless._provenance._repo_tracks_module` is now cached, removing one git subprocess per
+  `SearchStrategy.run()`. Whether a repo tracks a given source file is static for a process. The tree
+  **state** is deliberately *not* cached — a run that starts clean and turns dirty must report dirty, and
+  a stale `"clean"` is exactly the false provenance the module exists to prevent. Both properties are
+  pinned by tests.
+- `WorkUnitMapError.results` documents why it is `list[object | None]` and cannot be narrower (`except
+  WorkUnitMapError as exc` erases any type parameter, so a generic exception would not help), and points
+  callers wanting typed partial results at `on_error="collect"`. A test pins that both routes return
+  identical values.
+
 ### Internal
 - The published sdist no longer ships `/.github` — CI workflows, `dependabot.yml`, `CODEOWNERS`, and the
   PR/issue templates (8 files). They are development infrastructure with no use to anyone installing the

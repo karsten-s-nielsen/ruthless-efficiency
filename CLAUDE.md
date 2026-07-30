@@ -68,6 +68,10 @@ not here.
   field added later is included automatically — the failure mode of forgetting becomes an unnecessary
   cache *miss* (recompute, safe), never a stale *hit* (wrong). Naming a non-existent field raises. Each
   exclusion carries a comment naming the test that makes it safe (see evolve's `_SEED_CACHE_EXCLUDE`).
+  **`_tag`'s branch order is load-bearing** wherever one type subclasses another: `Enum` first (an
+  `IntEnum`/`StrEnum` member is also an `int`/`str`), `bool` before `int`, `datetime` before `date`. A
+  wrong order silently collides the subclass with its base — tests pin all three. Extending `_tag` to a
+  new type means adding a tag *and* checking where it belongs in that order.
 - **Provenance never overclaims.** `ruthless._provenance.code_identity()` never reports a commit
   without a tree state, and never degrades to `"clean"` — a bare SHA from a dirty tree is
   verifiable-looking *false* provenance, worse than recording nothing. Keys are `ruthless_`-prefixed

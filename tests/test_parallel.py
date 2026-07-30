@@ -1,6 +1,7 @@
 import concurrent.futures
 import os
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -159,6 +160,22 @@ def test_collect_with_no_failures_returns_empty_failures():
     results, failures = map_work_units(_square, [1, 2, 3], workers=2, on_error="collect")
     assert results == [1, 4, 9]
     assert failures == []
+
+
+def test_both_partial_result_routes_agree_and_the_typed_one_is_collect():
+    """`WorkUnitMapError.results` is `list[object | None]` and CANNOT be narrower: `except
+    WorkUnitMapError as exc` erases any type parameter, so making the exception generic would not help a
+    caller. The type-preserving route is therefore `on_error="collect"`, which returns
+    `list[R | None]` directly. A caller who prefers to catch casts explicitly. Both yield the same
+    values — pinned here so the two paths cannot drift."""
+    with pytest.raises(WorkUnitMapError) as ei:
+        map_work_units(_flaky, list(range(6)), workers=4)
+    via_error = cast("list[int | None]", ei.value.results)
+
+    via_collect, failures = map_work_units(_flaky, list(range(6)), workers=4, on_error="collect")
+
+    assert via_error == via_collect == [0, 10, 20, None, 40, 50]
+    assert [f.index for f in ei.value.failures] == [f.index for f in failures] == [3]
 
 
 def test_collect_path_can_still_raise_on_pool_death():

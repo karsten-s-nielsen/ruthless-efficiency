@@ -129,6 +129,33 @@ def test_repo_tracks_module_rejects_a_non_repo(tmp_path):
     assert _repo_tracks_module(module.resolve()) is False
 
 
+def test_repo_tracks_module_is_cached_per_path(tmp_path, monkeypatch):
+    """Whether a repo tracks a given source file is static for the life of a process, so the ls-files
+    probe is cached — one fewer git subprocess per `run()`. Cached on the ARGUMENT, so the test seam
+    (`repo_root=`) and differing module paths keep their own entries."""
+    _repo_tracks_module.cache_clear()
+    module = _repo_with_module(tmp_path, "ruthless/_provenance.py", track=True)
+    seen: list[str] = []
+    real = _provenance._run_git
+
+    def counting(args, root):
+        seen.append(args[0])
+        return real(args, root)
+
+    monkeypatch.setattr(_provenance, "_run_git", counting)
+    assert _repo_tracks_module(module) is True
+    assert _repo_tracks_module(module) is True
+    assert seen.count("ls-files") == 1, f"ls-files ran {seen.count('ls-files')}x; expected 1 (cached)"
+
+
+def test_tree_state_is_not_cached(clean_repo):
+    """Guards against over-caching. The tracking probe is cached; the tree STATE must not be, or a run
+    started clean and finished dirty would keep reporting clean."""
+    assert code_identity(repo_root=clean_repo)["ruthless_git_state"] == "clean"
+    (clean_repo / "new.txt").write_text("x")
+    assert code_identity(repo_root=clean_repo)["ruthless_git_state"] == "dirty"
+
+
 def test_code_identity_reports_unknown_when_the_module_is_not_tracked(clean_repo, monkeypatch):
     """Integration guard for P1, through the real auto-discovery path. Point `_MODULE` at an 'installed'
     copy inside `clean_repo` — a repo with a perfectly good HEAD — and assert the no-argument call refuses
