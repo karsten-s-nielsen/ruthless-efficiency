@@ -5,7 +5,14 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
-## [Unreleased]
+## [0.3.1] - 2026-07-30
+
+Patch, not minor: no public API changed. One reachable bug fix in a private core primitive, plus internal
+and packaging improvements.
+
+**Existing caches are unaffected.** The `_tag` extension below is purely additive — every type that
+already fingerprinted produces a byte-identical digest, verified against the 0.3.0 algorithm across 17
+payloads including evolve's real seed-cache payload. Unlike 0.3.0, this release invalidates nothing.
 
 ### Fixed
 - `ruthless._fingerprint` now handles `Path`, `Enum`, `datetime`, and `date` instead of raising. A config

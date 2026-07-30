@@ -12,4 +12,4 @@ Release note: this is the ONLY place the version is written. `pyproject.toml` de
 
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
