@@ -5,7 +5,10 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
-## [Unreleased]
+## [0.3.0] - 2026-07-30
+
+Minor bump rather than patch: `map_work_units` changes which exception a failing map raises, and under
+this project's `0.x` convention a breaking change takes the minor slot.
 
 ### Added
 - Private core cache-identity primitive (`ruthless._fingerprint`): a type-tagged, structural,

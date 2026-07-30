@@ -1,7 +1,7 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at `0.2.1` (`0.x` — API unstable). **Phase 1A** delivered the core
+pluggable compute backends. Ships at `0.3.0` (`0.x` — API unstable). **Phase 1A** delivered the core
 ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
 optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
 per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
