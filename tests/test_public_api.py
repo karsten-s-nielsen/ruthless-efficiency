@@ -44,6 +44,9 @@ _EXPECTED_PUBLIC = {
     "render_json",
     "render_summary_md",
     "assert_cache_equivalence",
+    # cache identity (public since 0.4.0 — digest stability is a compatibility contract, see ADR-002)
+    "fingerprint",
+    "fingerprint_model",
     # metadata
     "__version__",
 }

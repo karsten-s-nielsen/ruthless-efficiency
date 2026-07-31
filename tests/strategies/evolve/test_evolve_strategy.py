@@ -188,3 +188,13 @@ def test_a_positive_score_seed_result_is_cache_readable(seed_dir, tmp_path):
         json.dumps({"program": "seed0.py", "fingerprint": fp, "metrics": {"combined_score": 0.5}})
     )
     assert strat._load_cached_seeds(results_dir, [seed_dir / "seed0.py"], fp) == {"seed0": {"combined_score": 0.5}}
+
+
+def test_seed_cache_exclude_matches_the_golden_table():
+    """`tests/test_fingerprint_golden.py`'s "evolve-seed-cache" case restates this exclusion set so it
+    can pin the real payload without importing the strategy package (which would need the [evolve]
+    extra and would drop the case from the lean Windows CI leg). Restating means the two can drift, so
+    this pins them together."""
+    from ruthless.strategies.evolve_.strategy import _SEED_CACHE_EXCLUDE
+
+    assert _SEED_CACHE_EXCLUDE == frozenset({"timeout_seconds"})

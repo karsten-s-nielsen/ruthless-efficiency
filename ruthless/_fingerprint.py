@@ -1,11 +1,20 @@
-"""Private core cache-identity primitive: a deterministic, collision-resistant digest over declared
-inputs, plus a model-scoped wrapper whose invalidation scope is a declared EXCLUSION set.
+"""Core cache-identity primitive: a deterministic, collision-resistant digest over declared inputs,
+plus a model-scoped wrapper whose invalidation scope is a declared EXCLUSION set.
 
-Private (`_`-prefixed, absent from `ruthless.__all__`) for the same reason as `_logging` and `_io`: it is
-shared across the core and the strategies without committing a `1.0` public surface. Promotion to a
-public `fingerprint` module stays purely additive if a second real caller appears.
+**Public functions, private module.** `fingerprint` and `fingerprint_model` are re-exported from
+`ruthless` and listed in `ruthless.__all__` (since 0.4.0), but this module keeps its `_` prefix
+deliberately. A public `ruthless/fingerprint.py` would collide with the re-exported FUNCTION name:
+`import ruthless.fingerprint` anywhere in the process rebinds that attribute on the package from the
+function to the module, so `from ruthless import fingerprint` would yield different objects depending
+on unrelated import order. Keeping the module private makes that impossible, and matches
+`__init__.py`'s rule that the curated top-level namespace is the supported surface while submodule
+paths are implementation detail.
 
-Existing callers: `strategies/evolve_/strategy.py` (seed-result cache identity)."""
+**The digest is a compatibility contract, not an implementation detail** — see `fingerprint` below and
+ADR-002. Consumers persist it as a cache key.
+
+Callers: `ruthless.strategies.evolve_.strategy` (seed-result cache identity), plus external consumers
+via the public re-export."""
 
 from __future__ import annotations
 
@@ -75,7 +84,19 @@ def fingerprint(payload: Mapping[str, object], *, length: int = 16) -> str:
     Three deliberate consequences, all erring toward an unnecessary cache MISS rather than a stale HIT:
     `-0.0` and `0.0` digest differently despite comparing equal; two mappings that compare equal can
     digest differently (`{True: "x"} == {1: "x"}` in Python, but the keys tag differently); and
-    extending `_tag` to a new type is an explicit change with a test rather than an accident."""
+    extending `_tag` to a new type is an explicit change with a test rather than an accident.
+
+    STABILITY CONTRACT. This digest is a PERSISTED CACHE KEY in consumer storage. Any change that
+    alters the digest of a payload that already fingerprinted is BREAKING, not additive - regardless of
+    motive, including a correctness fix. It takes the minor slot under 0.x, and its CHANGELOG entry
+    must state explicitly that it invalidates existing caches. Extending `_tag` to a new type is
+    additive ONLY IF every already-supported payload digests identically, which is what
+    `tests/test_fingerprint_golden.py` proves.
+
+    The guarantee is over the LOGICAL VALUE, not over how the caller constructed it. `Path(str)` in
+    particular parses per-platform - a backslash is a separator on Windows and an ordinary character on
+    POSIX - so a caller spanning platforms must pass `PurePosixPath` or normalise before fingerprinting.
+    Constructing the value is the caller's responsibility; digesting it identically everywhere is ours."""
     return hashlib.sha256(_canon(dict(payload)).encode("utf-8")).hexdigest()[:length]
 
 

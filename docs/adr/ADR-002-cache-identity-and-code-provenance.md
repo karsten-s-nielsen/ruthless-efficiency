@@ -1,9 +1,10 @@
 # ADR-002: Cache identity and code provenance in the pure core
 
-- **Status:** Accepted
+- **Status:** Accepted — amended in `0.4.0` (decision 1 and the consequences it carries)
 - **Date:** 2026-07-30
 - **Component:** `ruthless/_fingerprint.py`, `ruthless/_provenance.py`, `ruthless/_version.py`
-  (call sites: `ruthless/strategies/evolve_/strategy.py`, all three strategies' `Result.provenance`)
+  (call sites: `ruthless/__init__.py` (public re-export, 0.4.0),
+  `ruthless/strategies/evolve_/strategy.py`, all three strategies' `Result.provenance`)
 
 ## Context
 
@@ -32,12 +33,33 @@ the working tree is modified, so a bare SHA on an artifact built from a dirty tr
 
 ## Decision
 
-**1. One hashing implementation, private, in the core.** `ruthless/_fingerprint.py` is type-tagged in
-both the **key** and the value position, structural rather than concatenated, order-insensitive, and
-fail-closed on unknown types (raising rather than falling back to `str()`, which is exactly how two
-distinct objects acquire one digest). It is `_`-prefixed and absent from `__all__`, following
-`_logging.py` / `_io.py`: shared across core and strategies with no `1.0` API commitment. Promotion to a
-public module stays purely additive.
+**1. One hashing implementation in the core — private first, public since 0.4.0.**
+`ruthless/_fingerprint.py` is type-tagged in both the **key** and the value position, structural rather
+than concatenated, order-insensitive, and fail-closed on unknown types (raising rather than falling
+back to `str()`, which is exactly how two distinct objects acquire one digest).
+
+*As originally decided (0.3.x):* it was `_`-prefixed and absent from `__all__`, following `_logging.py`
+/ `_io.py` — shared across core and strategies with no `1.0` API commitment, pending a second real
+caller.
+
+*Superseded in 0.4.0:* that trigger fired, so `fingerprint` and `fingerprint_model` are now re-exported
+from `ruthless` and listed in `__all__`. The **module** stays `_`-prefixed, because a public
+`ruthless/fingerprint.py` would shadow the re-exported function name (`import ruthless.fingerprint`
+rebinds the package attribute from the function to the module).
+
+**Digest stability is now a compatibility contract.** The digest is a persisted cache key in consumer
+storage, so any change altering an existing payload's digest is breaking, not additive — regardless of
+motive, including a correctness fix. It takes the minor slot under `0.x` and its CHANGELOG entry must
+say it invalidates existing caches. There is no carve-out: a carve-out is the loophole every future
+digest change would be argued into, and it buys the consumer nothing, since an orphaned cache is
+equally silent whether the digest moved for a good reason or a careless one. The enforcement is
+`tests/test_fingerprint_golden.py`, and the point of pinning bytes rather than relations is to
+manufacture a reviewable moment: changing a digest means editing that table.
+
+The guarantee is over the logical value. `Path(str)` parses per-platform, so construction is the
+caller's responsibility; digesting identically everywhere is ours. `pydantic` is pinned `<3` because
+`fingerprint_model` digests `model_dump()` output, which places pydantic's serialisation inside the
+digest's blast radius — the same reasoning that already pins `numpy<3` for the determinism gate.
 
 This is not speculative extraction. The exclusion contract below has to live somewhere, and it cannot
 live in a strategy internal without a second strategy having to import across a boundary
@@ -91,6 +113,39 @@ a test can only fail after someone has already shipped the inconsistency to a re
   a new type (`Path`, `datetime`, `Enum`) is an explicit change with a test rather than an accident.
 - **The evolve seed cache invalidated once.** Same input set, new digest value, so existing on-disk caches
   miss and recompute. Benign, and in the fail-closed direction.
+- **(0.4.0) A second review obligation, of exactly the same kind as the first.** The golden table proves
+  every *payload* is pinned; nothing proves every `_tag` *branch* has a payload. A new branch can land
+  with no case and the table stays green while the new type goes unguarded indefinitely. Extending `_tag`
+  must add a golden case in the same commit, and a reviewer must check that it did.
+- **(0.4.0) The pin propagates to consumers.** `pydantic<3` is no longer only ruthless's business: it
+  constrains the resolution of every project that installs ruthless. Accepted deliberately — an
+  unannounced pydantic major moving `model_dump()` output would move consumer cache keys with nothing in
+  ruthless changing, which is precisely the failure the contract exists to make impossible. Lifting the
+  pin means first proving the digest is unmoved, on the same evidence standard as a `_tag` change.
+- **(0.4.0) The contract had already been broken once, unknowingly — which is why it is now written.**
+  Executing the golden table against the published wheels established that `0.3.1` was *not* purely
+  additive as its entry claimed. `0.3.0` had no `enum` branch, so `IntEnum` and `str`-subclassing `Enum`
+  members fell through to the `int`/`str` branches: they did not raise, they digested successfully, and
+  identically to the bare value they wrap. `0.3.1`'s new `enum` branch moved both. Two payload shapes
+  were therefore cache-invalidating in a release published as a patch. The `0.3.1` entry carries a
+  correction; the episode is the evidence for the no-carve-out rule, since the original claim was made in
+  good faith and was still wrong.
+- **(0.4.0) Release procedure gained a hard rule**, on top of the version bump below: a change that moves
+  any already-supported payload's digest takes the **minor** slot and its CHANGELOG entry must state that
+  it invalidates existing caches. Editing `tests/test_fingerprint_golden.py` is the friction that forces
+  the question to be asked out loud.
+- **(0.4.0) Prose may not quote a digest**, enforced by `tests/test_docs_no_digest_literals.py` rather
+  than by convention. A digest in a document drifts silently — nothing re-runs a spec — and invites a
+  later reader to lift it back into the golden table on the assumption it had already been checked, which
+  would pin a documented value instead of the algorithm's output. Defence-in-depth around the table's
+  status as single source of truth, with a declared exclusion set for values that are evidence inside a
+  completed decision record. It is a strong guard, not a total one: it recognises the default 16-char
+  digest, so other lengths and a few unusual spellings fall outside it, and its docstring says so.
+- **(0.4.0) Cross-platform CI is now load-bearing, not hygiene.** `core-lean-windows` exists because
+  consumers of the digest span Windows and Linux while CI ran only on Linux, so a platform-dependent
+  digest could not be observed here at all. The guarantee it protects is over the **logical value**:
+  `Path(str)` parses per-platform, so a caller spanning platforms must normalise before fingerprinting —
+  constructing the value is the caller's responsibility, digesting it identically everywhere is ours.
 - **A wheel install reports `ruthless_git_state: "unknown"`**, with `ruthless_version` carrying the
   identity. This is the correct outcome, not a degradation — but it will surprise someone.
 - **The core now shells out to `git`**, opportunistically. It adds no Python dependency and absent git is
