@@ -57,6 +57,9 @@ primitive, on YAGNI / Rule-of-Three grounds. That is reversed here, for two reas
 So: build the primitive properly, place it privately, make no public API commitment. Promoting
 `_fingerprint` to a public `fingerprint` later is purely additive.
 
+> The digest in §0.3 below is a historical illustration. `tests/test_fingerprint_golden.py` is the
+> single source of truth for pinned bytes.
+
 ### 0.3 Review round 1 — what changed in rev 2
 
 Reviewed by the originating silly-kicks session (`ruthless-spec-REVIEW.md`). It re-ran every
@@ -97,8 +100,9 @@ reject (§2.3.1). Three items landed:
 | **R3** | §1.4.1's *"any early abort is nondeterministic"* is too strong: the `workers <= 1` serial branch is index-ordered, so an abort there *would* be deterministic, and a reader could counter "then allow it only for `workers <= 1`". | **ACCEPTED**, §1.4.1 |
 
 Both were verified here rather than accepted. R1 reproduces exactly — `{"cfg": {True: "x"}} ==
-{"cfg": {1: "x"}}` is `True` while the digests are `f78dc886a9ff484e` vs `ef4b57bca7869c2c`, matching the
-review's reported prefixes. R2's recipe works on this box (py3.10.19, win32).
+{"cfg": {1: "x"}}` is `True` while the two digests differ, matching the review's reported prefixes
+byte-for-byte. The values are not restated here — `tests/test_fingerprint_golden.py` is the single
+source of truth for pinned bytes. R2's recipe works on this box (py3.10.19, win32).
 
 **One correction to R2, and it matters for test 9.** The review reports five units collected before the
 pool death (`[0, 1, 3, 4, 5]`); this box collected **two** (`[0, 1]`). The recipe is sound but **the
@@ -519,6 +523,9 @@ def _canon(value: object) -> str:
 The `bool`-before-`int` ordering is load-bearing: `isinstance(True, int)` is `True`, so the natural
 ordering would tag `True` as `["int", True]` and collide it with `1`.
 
+> Digests in §2.3.1 below are historical illustrations. `tests/test_fingerprint_golden.py` is the single
+> source of truth for pinned bytes.
+
 #### 2.3.1 F1 — rev 1 tagged values but not keys. Measured collision.
 
 Rev 1's mapping branch was `sorted((str(k), _tag(v)) for ...)` — `str(k)`, bare. Verified here against
@@ -567,8 +574,9 @@ hit. Enumerated in full because listing a subset invites the next reader to file
 1. `-0.0` and `0.0` get different digests despite comparing equal.
 2. **Two mappings that compare equal can digest differently (R1).** `{"cfg": {True: "x"}} ==
    {"cfg": {1: "x"}}` is `True` in Python — `True == 1` and `hash(True) == hash(1)` — but the digests
-   differ (`f78dc886a9ff484e` vs `ef4b57bca7869c2c`, measured). This is a direct consequence of tagging
-   keys, i.e. of the F1 fix, and it is the same safe-direction trade as (1).
+   differ (measured; the values are not restated here — `tests/test_fingerprint_golden.py` is the
+   single source of truth for pinned bytes). This is a direct consequence of tagging keys, i.e. of the
+   F1 fix, and it is the same safe-direction trade as (1).
 3. Extending `_tag` to a new type (`Path`, `datetime`, `Enum`) is an explicit change with a test rather
    than an accident.
 

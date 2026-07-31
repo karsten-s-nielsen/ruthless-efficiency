@@ -9,6 +9,7 @@ imported from their own namespaces (`ruthless.strategies.optuna_`, `ruthless.str
 
 from __future__ import annotations
 
+from ruthless._fingerprint import fingerprint, fingerprint_model
 from ruthless._version import __version__ as __version__  # re-export; not in __all__ (dunder)
 from ruthless.backend import ComputeBackend, InProcessBackend
 from ruthless.config import (
@@ -66,6 +67,9 @@ __all__ = [
     "TransientEvaluationError",
     "assert_cache_equivalence",
     "classify_metric",
+    # cache identity — digest stability is a compatibility contract (ADR-002)
+    "fingerprint",
+    "fingerprint_model",
     "penalty_metrics",
     # reporting + cache-equivalence harness
     "render_json",

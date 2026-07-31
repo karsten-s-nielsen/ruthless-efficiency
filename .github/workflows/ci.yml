@@ -47,3 +47,19 @@ jobs:
       - run: uv pip install -e ".[dev]"
       - run: uv run python -c "import ruthless; from ruthless.strategies.random_.strategy import RandomSearchStrategy; print(ruthless.__version__)"
       - run: uv run pytest -v --ignore=tests/backends --ignore=tests/strategies/evolve --ignore=tests/e2e/test_evolve_orchestration_gate.py --ignore=tests/strategies/optuna_ --ignore=tests/e2e/test_optuna_resume_gate.py
+
+  core-lean-windows:
+    # The cross-platform leg for cache identity. `fingerprint` digests are PERSISTED CACHE KEYS in
+    # consumer storage, and consumers span Windows and Linux, so a platform-dependent digest would
+    # orphan their caches silently. A Linux-only CI can never observe that. Mirrors `core-lean`
+    # (lean [dev] install, core test subset) rather than matrixing the full `test` job: matrixing
+    # would install openevolve/docker/huggingface_hub on Windows and turn any fingerprint change into
+    # a third-party Windows-compatibility exercise.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: uv python install 3.10
+      - run: uv venv --python 3.10
+      - run: uv pip install -e ".[dev]"
+      - run: uv run pytest -v --ignore=tests/backends --ignore=tests/strategies/evolve --ignore=tests/e2e/test_evolve_orchestration_gate.py --ignore=tests/strategies/optuna_ --ignore=tests/e2e/test_optuna_resume_gate.py

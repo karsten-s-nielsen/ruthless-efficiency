@@ -5,6 +5,53 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [0.4.0] - 2026-07-30
+
+Minor rather than patch: the public API gains two names. **This release does not invalidate existing
+caches** — the digest algorithm is untouched, and every previously-supported payload digests
+identically (now enforced by a golden table rather than a one-off check).
+
+### Added
+- `fingerprint` and `fingerprint_model` are now part of the public API (`from ruthless import
+  fingerprint`). They were private through 0.3.x pending a second real caller; that trigger has fired.
+  Signatures are unchanged. The **module** stays `ruthless/_fingerprint.py`: a public
+  `ruthless/fingerprint.py` would shadow the re-exported function, because `import ruthless.fingerprint`
+  rebinds that attribute on the package from the function to the module.
+- **Digest stability is now a stated compatibility contract.** The digest is a persisted cache key in
+  consumer storage, so any change altering an already-supported payload's digest is **breaking, not
+  additive** — regardless of motive, including a correctness fix. It takes the minor slot under `0.x`
+  and its entry here must say it invalidates existing caches. There is no carve-out. Stated on
+  `fingerprint`, in ADR-002 and in CLAUDE.md.
+- `tests/test_fingerprint_golden.py` pins one payload per `_tag` branch as literals in test source —
+  the enforcement behind the contract above, and the single source of truth for pinned bytes. The
+  existing suite was entirely relational (`a != b`), which catches a collision but not a *shift*: a
+  `_tag` change can move every digest while leaving every relation intact. The four subclass-order
+  traps (`IntEnum`/`int`, str-enum/`str`, `bool`/`int`, `datetime`/`date`) are pinned on **both** sides
+  for exactly that reason. Verified against the published 0.3.1 wheel: **44 of 44 cases match**, so this
+  release moves no digest.
+  - Running the same table against published **0.3.0** — all 44 cases, no skip list — established
+    something else: **0.3.1 was not purely additive.** 0.3.0 rejected 12 cases outright with
+    `TypeError` (the paths, the dates, and *plain* `Enum`), which is the correct, visible failure. Of
+    the 32 it did not reject, **30 are byte-identical and 2 differ: `IntEnum` and str-`Enum`.** Those
+    two slipped through precisely *because* they subclass `int`/`str` — 0.3.0 had no `enum` branch at
+    all, so an `IntEnum` member fell through to the `int` branch and a `str`-subclassing `Enum` member
+    to the `str` branch. They did not raise; they fingerprinted successfully, digesting identically to
+    the bare `int`/`str` value they wrap. That is the same subclass-shadowing trap the golden table now
+    pins on both sides. 0.3.1's new `enum` branch moved both. **Under the contract this release states,
+    0.3.1 should have been classed cache-invalidating for those payload shapes**, and the entry below
+    now carries a correction saying so. The 0.3.1 hand-run missed it by assuming 0.3.0 raised on enums,
+    and the first pass of this verification repeated that assumption and skipped every `enum-` case.
+
+### Changed
+- `pydantic` is pinned `<3`. `fingerprint_model` digests `model_dump()` output, so pydantic's
+  python-mode serialisation of `Path`/`Enum` sits inside the digest's blast radius: an unpinned major
+  could move every consumer's persisted cache key with nothing in ruthless changing. Same class of
+  guarantee as the existing `numpy<3` pin for the determinism gate.
+- CI gains a `core-lean-windows` job. Consumers of the digest span Windows and Linux while ruthless's
+  CI was Linux-only, so a platform-dependent digest could not be observed here. The digest guarantee is
+  over the **logical value** — `Path(str)` parses per-platform, so constructing the value stays the
+  caller's responsibility, now stated in `fingerprint`'s docstring.
+
 ## [0.3.1] - 2026-07-30
 
 Patch, not minor: no public API changed. One reachable bug fix in a private core primitive, plus internal
@@ -13,6 +60,16 @@ and packaging improvements.
 **Existing caches are unaffected.** The `_tag` extension below is purely additive — every type that
 already fingerprinted produces a byte-identical digest, verified against the 0.3.0 algorithm across 17
 payloads including evolve's real seed-cache payload. Unlike 0.3.0, this release invalidates nothing.
+
+> **Correction (0.4.0):** the paragraph above is too broad and is wrong for two payload shapes. It holds
+> for every type 0.3.0 tagged *correctly*, but not for `IntEnum` or `str`-subclassing `Enum` values.
+> 0.3.0 had no `enum` branch at all, so those members fell through to the `int`/`str` branches: they
+> fingerprinted successfully and digested identically to the bare `int`/`str` value they wrap. Adding
+> the `enum` branch below moved both digests, so **this release did invalidate caches keyed on an
+> `IntEnum` or str-`Enum` payload** and should have been classed as doing so. Established by executing
+> both published versions during the 0.4.0 golden-table work; the original check here missed it by
+> assuming 0.3.0 raised on enums. The entry is left as published, per Keep a Changelog, and corrected
+> here rather than rewritten.
 
 ### Fixed
 - `ruthless._fingerprint` now handles `Path`, `Enum`, `datetime`, and `date` instead of raising. A config

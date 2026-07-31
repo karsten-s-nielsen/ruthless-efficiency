@@ -1,7 +1,7 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at `0.3.1` (`0.x` — API unstable). **Phase 1A** delivered the core
+pluggable compute backends. Ships at `0.4.0` (`0.x` — API unstable). **Phase 1A** delivered the core
 ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
 optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
 per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
@@ -61,9 +61,10 @@ not here.
   results; `on_error="collect"` returns them instead. A dead pool propagates `BrokenExecutor`
   unwrapped, because that voids the attempted-every-unit guarantee. Cost: a systematic failure now
   costs a full pass (the serial path no longer short-circuits).
-- **Cache identity is a declared EXCLUSION set, never an inclusion list.** `ruthless._fingerprint`
-  (private core) is the one hashing implementation: type-tagged in both the **key** and value position,
-  structural rather than concatenated, order-insensitive, and fail-closed on unknown types.
+- **Cache identity is a declared EXCLUSION set, never an inclusion list.** `ruthless._fingerprint` is
+  the one hashing implementation (the *module* stays `_`-prefixed so it cannot shadow the re-exported
+  function name; both functions are public — see below): type-tagged in both the **key** and value
+  position, structural rather than concatenated, order-insensitive, and fail-closed on unknown types.
   `fingerprint_model(model, exclude=...)` covers every model field except the named exclusions, so a
   field added later is included automatically — the failure mode of forgetting becomes an unnecessary
   cache *miss* (recompute, safe), never a stale *hit* (wrong). Naming a non-existent field raises. Each
@@ -71,7 +72,21 @@ not here.
   **`_tag`'s branch order is load-bearing** wherever one type subclasses another: `Enum` first (an
   `IntEnum`/`StrEnum` member is also an `int`/`str`), `bool` before `int`, `datetime` before `date`. A
   wrong order silently collides the subclass with its base — tests pin all three. Extending `_tag` to a
-  new type means adding a tag *and* checking where it belongs in that order.
+  new type means adding a tag, checking where it belongs in that order, *and* adding a golden case for
+  it: the golden table proves every payload is pinned, but nothing proves every `_tag` branch has a
+  payload, so an unpinned new branch stays green and unguarded until someone notices.
+  **Digest bytes are a compatibility contract.** `fingerprint`/`fingerprint_model` are public since
+  0.4.0 and consumers persist the digest as a cache key, so any change altering an already-supported
+  payload's digest is BREAKING (minor slot, CHANGELOG must say it invalidates caches) — including a
+  correctness fix. `tests/test_fingerprint_golden.py` pins one payload per `_tag` branch as literals;
+  it is the single source of truth for pinned bytes, and **no `.md` file may quote a digest** — a
+  digest in prose gets lifted back into the golden table on the assumption it was already checked.
+  That rule is enforced, not merely written: `tests/test_docs_no_digest_literals.py` scans every `.md`
+  and fails on any 16-hex literal outside its declared exclusion set (one entry — a *rejected*-algorithm
+  value in the 2026-07-29 spec, inert because no shipped `_tag` can produce it; a stale entry fails too).
+  The guarantee is over the logical VALUE —
+  `Path(str)` parses per-platform, so construction is the caller's problem. `pydantic` is pinned `<3`
+  because `fingerprint_model` digests `model_dump()`.
 - **Provenance never overclaims.** `ruthless._provenance.code_identity()` never reports a commit
   without a tree state, and never degrades to `"clean"` — a bare SHA from a dirty tree is
   verifiable-looking *false* provenance, worse than recording nothing. Keys are `ruthless_`-prefixed
@@ -159,9 +174,13 @@ Python dependency is added for it.
 - Work-unit error model + cache identity (rev 3):
   `docs/superpowers/specs/2026-07-29-parallel-error-model-and-cache-identity.md` and
   `docs/superpowers/plans/2026-07-29-parallel-error-model-and-cache-identity-plan.md`
+- Public fingerprint + digest stability (0.4.0):
+  `docs/superpowers/specs/2026-07-30-public-fingerprint-and-digest-stability-design.md` and
+  `docs/superpowers/plans/2026-07-30-public-fingerprint-and-digest-stability-plan.md`
 
 ## Architecture decisions
 
 - `docs/adr/ADR-001-ast-sandbox-security-model.md` — AST allowlist for evolve Level-2 code evolution.
-- `docs/adr/ADR-002-cache-identity-and-code-provenance.md` — why cache identity is a private core
-  primitive with an exclusion-set scope, and why provenance never emits a SHA without a tree state.
+- `docs/adr/ADR-002-cache-identity-and-code-provenance.md` — why cache identity is a core primitive
+  with an exclusion-set scope (public since 0.4.0; digest bytes are a compatibility contract), and why
+  provenance never emits a SHA without a tree state.

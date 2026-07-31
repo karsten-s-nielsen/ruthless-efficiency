@@ -74,7 +74,7 @@ A pure hexagonal core (`ruthless/`) defines the ports (`Objective`, `SearchStrat
 `ComputeBackend`) and value types; strategies and backends depend on the core, never the reverse
 (enforced by import-linter). For contributor-level detail see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-To explore the C4 diagrams (System Context, Containers, and Core Components), download
+To explore the C4 diagrams (System Context, Containers, and per-container Components), download
 [`docs/c4/architecture.html`](docs/c4/architecture.html) and open it in a browser — GitHub does not
 render HTML files inline.
 

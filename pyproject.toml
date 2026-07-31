@@ -12,7 +12,10 @@ license = { text = "MIT" }
 authors = [{ name = "Karsten Skyt" }]
 keywords = ["optimization", "hyperparameter-optimization", "evolutionary-search", "optuna"]
 # numpy pinned <3 so the RandomSearch RNG stream stays stable for the determinism gate (review H-D).
-dependencies = ["pydantic>=2", "numpy>=1.24,<3", "pyyaml>=6"]
+# pydantic pinned <3 for the same class of reason: `fingerprint_model` digests `model_dump()` output,
+# so pydantic's python-mode serialisation of Path/Enum sits INSIDE the digest's blast radius. An
+# unpinned major could move every consumer's persisted cache key with nothing in ruthless changing.
+dependencies = ["pydantic>=2,<3", "numpy>=1.24,<3", "pyyaml>=6"]
 
 [project.optional-dependencies]
 optuna = ["optuna>=4.0"]                            # Phase 2
