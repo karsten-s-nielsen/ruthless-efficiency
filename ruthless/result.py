@@ -42,6 +42,22 @@ class Evaluation:
     ok: bool  # False = penalty/degenerate (recorded); fatal failures are never recorded
 
 
+@dataclass(frozen=True)
+class ProgressEvent:
+    """One observation of a completed candidate evaluation, handed to an Observer. Neutral across
+    strategies: it names no strategy-specific concept. ``number`` is the STUDY-GLOBAL trial number — it
+    matches ``Candidate.id`` (``t{number}``) and the returned ``Result.history``, and does NOT reset on
+    resume (a resumed run observes continued numbers such as 20..49, never a fresh 0..29). ``metrics``
+    carries every recorded metric (the scored one plus any auxiliaries), so a sink need not know which
+    key the strategy optimises. ``state`` is a neutral lowercase string (e.g. "complete"), never a
+    backend's own state enum."""
+
+    number: int
+    candidate: Candidate
+    metrics: Metrics
+    state: str
+
+
 @dataclass
 class Result:
     """Treat as immutable once returned by SearchStrategy.run (review M-C)."""

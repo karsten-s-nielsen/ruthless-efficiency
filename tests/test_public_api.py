@@ -13,11 +13,13 @@ _EXPECTED_PUBLIC = {
     # value types
     "Candidate",
     "Evaluation",
+    "ProgressEvent",
     "Result",
     "Metrics",
     "Direction",
     # ports
     "Objective",
+    "Observer",
     "CachedObjective",
     "SearchStrategy",
     "ComputeBackend",
@@ -74,4 +76,16 @@ def test_top_level_import_does_not_require_optional_extras() -> None:
     # optuna or openevolve (those live behind the [optuna]/[evolve] extras). Checked in a clean
     # subprocess so an extra imported by another test in this process cannot mask a regression.
     code = "import ruthless, sys; assert 'optuna' not in sys.modules and 'openevolve' not in sys.modules"
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 - fixed argv, no shell
+
+
+def test_core_observer_types_pull_no_optuna() -> None:
+    # Constructing/using the new core observer types must not import optuna: they are pure core. Checked
+    # in a clean subprocess so an extra imported by another test cannot mask a regression. (mlflow is
+    # never a ruthless dependency, so the meaningful guard is optuna-absence.)
+    code = (
+        "import sys; from ruthless import ProgressEvent, Observer, Candidate; "
+        "ProgressEvent(number=0, candidate=Candidate(id='t0', params={}), metrics={}, state='complete'); "
+        "assert 'optuna' not in sys.modules, 'core observer types must not import optuna'"
+    )
     subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 - fixed argv, no shell

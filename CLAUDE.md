@@ -1,7 +1,7 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at `0.4.0` (`0.x` — API unstable). **Phase 1A** delivered the core
+pluggable compute backends. Ships at `0.5.0` (`0.x` — API unstable). **Phase 1A** delivered the core
 ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
 optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
 per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
@@ -164,6 +164,13 @@ Python dependency is added for it.
 - **OptunaStrategy resume (C3):** no lost/dup trials + monotone growth + converge — NOT trajectory
   identity (Optuna doesn't persist sampler RNG). `best`/`history` are reconstructed from `study.trials`
   so they span the whole store on resume. SQLite store = single-process only.
+- **OptunaStrategy observer (0.5.0):** `run(..., observer=None)` accepts a neutral `Observer`
+  (`(ProgressEvent) -> None`; both are public core types). It fires once per completed trial via
+  `study.optimize(callbacks=...)`. `ProgressEvent.number` is the study-global trial number (does NOT
+  reset on resume); a raising observer is logged-and-isolated (never aborts the search); the core
+  imports no sink (`state` is a neutral `str`, not Optuna's `TrialState`). Optuna-only by design — a
+  port-level hook random/evolve merely ignored would be a silent no-op. The `Observer.__call__`
+  parameter is positional-only so any 1-arg callable (incl. `list.append`) conforms under pyright basic.
 
 ## Reference docs
 

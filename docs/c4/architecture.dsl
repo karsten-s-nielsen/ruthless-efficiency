@@ -26,12 +26,12 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
 
             core = container "Core & Ports" "The pure hexagon: a curated public API (ruthless.__all__) over ports, value types, error taxonomy, penalty guards, parallel map, cache identity (public since 0.4.0), code provenance, logging, the in-process backend, remote-resolvability types, the cross-wire contract, and a shared temp-file helper." "Python: ruthless" {
                 errors = component "errors" "Taxonomy: Fatal/Transient evaluation errors; classify_metric." "Python"
-                result = component "result" "Candidate (hashable, read-only params, + program), Evaluation, Result, Metrics." "Python"
+                result = component "result" "Candidate (hashable, read-only params, + program), Evaluation, Result, Metrics, ProgressEvent (neutral per-candidate observer event: study-global number, candidate, metrics, state)." "Python"
                 wire = component "wire" "Cross-wire failure/score contract: combined_score/error/_error_text keys, worst-score sentinel, surfaced-traceback limit." "Python"
                 io = component "_io" "program_to_path — uniform temp .py path-or-None for a Candidate's program (shared by backends + strategies)." "Python"
                 objectivePort = component "objective (port)" "Objective Protocol + CachedObjective (invariant-prep / per-trial-patch + patch_params)." "Python Protocol"
                 backendPort = component "backend (port)" "ComputeBackend Protocol (evaluate(candidate, objective, *, timeout)) + InProcessBackend." "Python"
-                strategyPort = component "strategy (port)" "Direction + the SearchStrategy Protocol." "Python Protocol"
+                strategyPort = component "strategy (port)" "Direction + the SearchStrategy Protocol + the Observer Protocol (positional-only per-candidate progress sink; any 1-arg callable conforms)." "Python Protocol"
                 remote = component "remote" "RemoteRef (install spec + entrypoint) + RemoteObjective Protocol — remote-execution opt-in." "Python"
                 guards = component "guards" "penalty_metrics — recorded penalty scores." "Python"
                 parallel = component "parallel" "map_work_units — intra-objective thread/process map. Every unit is always attempted (workers never changes which units ran); unit failures aggregate into WorkUnitMapError or return via on_error='collect'; a dead pool propagates BrokenExecutor." "Python"
@@ -91,11 +91,12 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 evostrategy -> provenance "Stamps code identity into the Result"
             }
 
-            optuna = container "OptunaStrategy [extra]" "Resumable Bayesian/sampler calibration: wraps an Optuna study (create_study + optimize), warm-start enqueue, ParamSpec->suggest, SQLite resume; uses the CachedObjective fast path." "Python: ruthless.strategies.optuna_" {
-                optstrategy = component "strategy" "OptunaStrategy.run: study/resume (load_if_exists + remaining-trials), warm-start, _suggest, best/history from study.trials." "Python"
+            optuna = container "OptunaStrategy [extra]" "Resumable Bayesian/sampler calibration: wraps an Optuna study (create_study + optimize), warm-start enqueue, ParamSpec->suggest, SQLite resume; uses the CachedObjective fast path; optional per-trial Observer hook." "Python: ruthless.strategies.optuna_" {
+                optstrategy = component "strategy" "OptunaStrategy.run: study/resume (load_if_exists + remaining-trials), warm-start, _suggest, best/history from study.trials; optional per-trial Observer via study.optimize callbacks (fault-isolated: a raising sink is logged, never aborts the search)." "Python"
 
-                optstrategy -> strategyPort "Implements SearchStrategy"
+                optstrategy -> strategyPort "Implements SearchStrategy; fires the Observer per trial"
                 optstrategy -> objectivePort "Fast path via CachedObjective; else the backend port"
+                optstrategy -> result "Emits a ProgressEvent per completed trial to the observer"
                 optstrategy -> guards "Records penalty scores (degenerate trials)"
                 optstrategy -> provenance "Stamps code identity into the Result"
             }

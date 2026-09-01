@@ -31,9 +31,9 @@ from ruthless.guards import penalty_metrics
 from ruthless.objective import CachedObjective, Objective
 from ruthless.remote import RemoteObjective, RemoteRef
 from ruthless.report import render_json, render_summary_md
-from ruthless.result import Candidate, Evaluation, Metrics, Result
+from ruthless.result import Candidate, Evaluation, Metrics, ProgressEvent, Result
 from ruthless.strategies.random_.strategy import RandomSearchStrategy
-from ruthless.strategy import Direction, SearchStrategy
+from ruthless.strategy import Direction, Observer, SearchStrategy
 from ruthless.testing import assert_cache_equivalence
 
 __all__ = [
@@ -52,9 +52,11 @@ __all__ = [
     "Metrics",
     # ports
     "Objective",
+    "Observer",
     # errors + guards
     "OptimizationError",
     "OptunaConfig",
+    "ProgressEvent",
     "RandomConfig",
     # built-in strategy
     "RandomSearchStrategy",

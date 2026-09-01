@@ -1,6 +1,8 @@
+import dataclasses
+
 import pytest
 
-from ruthless.result import Candidate, Evaluation, Result
+from ruthless.result import Candidate, Evaluation, ProgressEvent, Result
 
 
 def test_candidate_params_are_read_only_after_construction():
@@ -32,3 +34,18 @@ def test_result_tracks_best_and_history():
     r = Result(best=e1, history=[e0, e1], diagnostics={}, provenance={"seed": 42})
     assert r.best is not None
     assert r.best.candidate.id == "c1" and len(r.history) == 2 and r.provenance["seed"] == 42
+
+
+def test_progress_event_holds_its_fields():
+    c = Candidate(id="t0", params={"x": 1.0})
+    ev = ProgressEvent(number=0, candidate=c, metrics={"loss": 2.0, "aux": 1.0}, state="complete")
+    assert ev.number == 0
+    assert ev.candidate is c
+    assert ev.metrics == {"loss": 2.0, "aux": 1.0}
+    assert ev.state == "complete"
+
+
+def test_progress_event_is_frozen():
+    ev = ProgressEvent(number=1, candidate=Candidate(id="t1", params={}), metrics={}, state="complete")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        ev.number = 99  # type: ignore[misc]
