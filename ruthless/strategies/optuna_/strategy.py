@@ -14,7 +14,8 @@ from ruthless.backend import ComputeBackend
 from ruthless.config import Choice, FloatRange, IntRange, OptunaConfig, ParamSpec
 from ruthless.errors import classify_metric
 from ruthless.objective import CachedObjective, Objective
-from ruthless.result import Candidate, Evaluation, Result
+from ruthless.result import Candidate, Evaluation, ProgressEvent, Result
+from ruthless.strategy import Observer
 
 _log = get_logger("strategies.optuna")
 
@@ -27,6 +28,19 @@ def _suggest(trial: Any, name: str, spec: ParamSpec) -> Any:
     if isinstance(spec, Choice):
         return trial.suggest_categorical(name, spec.choices)
     raise TypeError(f"unsupported param spec {type(spec).__name__}")
+
+
+def _to_event(ft: Any) -> ProgressEvent:
+    """Translate an Optuna FrozenTrial into a neutral ProgressEvent. ``number`` is Optuna's study-global
+    trial number (matches Candidate.id and does NOT reset on resume); ``metrics`` mirrors ``_to_eval``
+    (every recorded user_attr, scored + auxiliary); ``state`` is a neutral lowercase string, never
+    Optuna's TrialState."""
+    return ProgressEvent(
+        number=ft.number,
+        candidate=Candidate(id=f"t{ft.number}", params=dict(ft.params)),
+        metrics=dict(ft.user_attrs),
+        state=ft.state.name.lower(),
+    )
 
 
 class OptunaStrategy:
@@ -47,7 +61,24 @@ class OptunaStrategy:
         self._cfg = config
         self._seed = seed
 
-    def run(self, objective: Objective, *, backend: ComputeBackend) -> Result:
+    def run(self, objective: Objective, *, backend: ComputeBackend, observer: Observer | None = None) -> Result:
+        """Drive the study and return a Result spanning the whole store.
+
+        Args:
+            objective: The objective to optimise (or a CachedObjective for the fast patch path).
+            backend: Compute backend used for the full-evaluate path.
+            observer: Optional neutral per-trial sink — any callable ``(ProgressEvent) -> None``. Fires
+                ONCE per completed trial, in trial order, after the trial is stored. Contract:
+
+                * Live hook, not a replay. On a resumed study the observer sees only the trials run in
+                  THIS call; ``ProgressEvent.number`` is the study-global trial number and does NOT
+                  reset on resume. The whole-store view is ``Result.history``. A per-run progress
+                  fraction must count events, not divide ``number`` by the budget.
+                * Fault-isolated. An observer that raises is logged at warning and the search continues.
+                * Fatal metrics are not observed. A non-finite scored metric raises
+                  ``FatalEvaluationError``, aborts the study, and fires no event for that trial.
+                * Fires identically for the full-evaluate and CachedObjective fast paths.
+        """
         import optuna
         from optuna.samplers import RandomSampler, TPESampler
         from optuna.trial import TrialState
@@ -95,9 +126,25 @@ class OptunaStrategy:
                 trial.set_user_attr(k, v)  # persisted -> lets resume reconstruct history (B1)
             return metrics[cfg.metric]
 
+        # An observer (if given) is wired as an Optuna callback: it fires once per completed trial, in
+        # trial order. The wrapper isolates observer faults — a telemetry sink must never abort the
+        # search (a raw callback exception propagates out of study.optimize). callbacks=None (Optuna's
+        # default) reproduces the pre-observer behaviour exactly.
+        callbacks: list[Any] | None = None
+        if observer is not None:
+            obs = observer  # non-None binding for the closure (narrowing does not survive into it)
+
+            def _observer_callback(study: Any, ft: Any) -> None:
+                try:
+                    obs(_to_event(ft))
+                except Exception:  # noqa: BLE001 — a telemetry sink must never abort the search
+                    _log.warning("observer_failed", extra={"trial": ft.number}, exc_info=True)
+
+            callbacks = [_observer_callback]
+
         remaining = max(0, cfg.n_trials - n_existing)
         if remaining:
-            study.optimize(_objective, n_trials=remaining)
+            study.optimize(_objective, n_trials=remaining, callbacks=callbacks)
 
         # best + history span the WHOLE store (reconstructed from study.trials, NOT this process). All
         # reconstructed Evaluations are ok=True (Optuna doesn't persist the 1A `ok` flag; filter by metric).

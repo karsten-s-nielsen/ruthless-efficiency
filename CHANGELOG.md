@@ -5,6 +5,33 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [0.5.0] - 2026-08-31
+
+Minor rather than patch: the public API gains two names (`Observer`, `ProgressEvent`) and
+`OptunaStrategy.run` gains an optional `observer` keyword. **This release does not invalidate existing
+caches** — the fingerprint/digest path is untouched.
+
+### Added
+- **A neutral per-trial observer for `OptunaStrategy`.** `OptunaStrategy.run(..., observer=None)` accepts
+  an optional `Observer` — any callable `(ProgressEvent) -> None`. It fires once per completed trial, in
+  trial order, with a `ProgressEvent(number, candidate, metrics, state)`, giving consumers migrating
+  raw-Optuna workflows back the per-trial callback hook (progress bars, live metric sinks) that
+  `study.optimize(callbacks=...)` provided. The MLflow/logging sink itself stays consumer-side.
+- **`Observer` (port) and `ProgressEvent` (value type) are public core types** (`from ruthless import
+  Observer, ProgressEvent`). Both are strategy-agnostic and stdlib-only: `import ruthless` still pulls no
+  optuna, and `ProgressEvent.state` is a neutral string (`"complete"`), never Optuna's `TrialState`, so
+  the core stays isolated. The types are designed so any strategy can adopt the hook later without a
+  breaking change; today only `OptunaStrategy` wires it (a port-level `observer` that random/evolve
+  merely ignored would be a silent no-op).
+
+### Semantics
+- The observer is a **live** per-trial hook: on a resumed study it sees only the trials run in that call,
+  and `ProgressEvent.number` is the study-global trial number (it does not reset on resume). The
+  whole-store view remains `Result.history`.
+- An observer that raises is isolated: the failure is logged at `warning` and the search continues — a
+  telemetry sink can never abort the optimization. A fatal (non-finite scored) metric still aborts the
+  study and fires no event for the aborted trial.
+
 ## [0.4.0] - 2026-07-30
 
 Minor rather than patch: the public API gains two names. **This release does not invalidate existing

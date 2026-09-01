@@ -62,3 +62,23 @@ def test_resume_with_warm_start_runs_exactly_n_trials_and_baseline_runs_once(tmp
     assert sorted(t.number for t in study.trials) == list(range(12))
     # the warm-start point appears exactly once across the whole store (not re-enqueued on resume).
     assert sum(1 for t in study.trials if t.params.get("x") == 7.5) == 1
+
+
+def test_observer_resume_fires_only_new_continued_numbers(tmp_path):
+    db = str(tmp_path / "obs.db")
+    first: list = []
+    OptunaStrategy(_cfg(2, db), seed=123).run(_Bowl(), backend=InProcessBackend(), observer=first.append)
+    assert [e.number for e in first] == [0, 1]
+    second: list = []
+    OptunaStrategy(_cfg(4, db), seed=123).run(_Bowl(), backend=InProcessBackend(), observer=second.append)
+    # the resumed run fires ONLY the two new trials, with CONTINUED store-global numbers — not 0,1
+    assert [e.number for e in second] == [2, 3]
+
+
+def test_observer_resume_with_no_remaining_trials_fires_zero_events(tmp_path):
+    db = str(tmp_path / "done.db")
+    OptunaStrategy(_cfg(3, db), seed=123).run(_Bowl(), backend=InProcessBackend())  # fill to n_trials
+    events: list = []
+    r = OptunaStrategy(_cfg(3, db), seed=123).run(_Bowl(), backend=InProcessBackend(), observer=events.append)
+    assert events == []  # remaining == 0 → study.optimize not called → no events
+    assert len(r.history) == 3  # Result is still reconstructed from the store
