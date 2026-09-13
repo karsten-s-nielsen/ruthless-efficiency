@@ -1,11 +1,16 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at `0.5.0` (`0.x` — API unstable). **Phase 1A** delivered the core
+pluggable compute backends. Ships at `0.6.0` (`0.x` — API unstable). **Phase 1A** delivered the core
 ports + built-in `RandomSearchStrategy` (determinism gate). **Phase 1B (library side)** adds the
 optional `[backends]` extra (`BackendPool` + `local_cuda`/`remote_ssh`/`hf_jobs`/`docker`, with the
 per-candidate timeout + transient-retry contract) and the `[evolve]` extra (`EvolveStrategy`, a thin
-adapter over OpenEvolve, + the AST sandbox). **Phase 2 (library side)** adds the `[optuna]` extra
+adapter over OpenEvolve, + the AST sandbox). Since `0.6.0` `EvolveStrategy` also runs a **general
+code-evolution mode** (`evolution.code_evolution=True` evolves an arbitrarily-named function; the evolved
+source is always handed to the entrypoint via `program_path` and the `config = {…}` dict is optional) —
+the hardcoded `custom_embed`/`custom_layers` name-detection is **gone from core**, and validation is
+**secure-by-default**: a code run requires a `validation_profile` **or** an explicit
+`EvolveConfig.allow_unvalidated_code=True` opt-out. **Phase 2 (library side)** adds the `[optuna]` extra
 (`OptunaStrategy` — resumable Bayesian/sampler calibration; `CachedObjective` invariant-prep /
 per-trial-patch port + `ruthless.testing.assert_cache_equivalence`). The consumer migrations (lakehouse
 evolve, and **silly-kicks adopting `ruthless[optuna]`** for its own calibrations) run in those repos,

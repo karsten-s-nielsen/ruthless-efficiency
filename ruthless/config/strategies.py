@@ -46,13 +46,19 @@ class EvolveConfig(BaseModel):
     seed_programs_dir: str  # dir of seed .py programs the run starts from
     prompt_template_dir: str | None = None  # OpenEvolve prompt templates
     search_space_validator: str | None = None  # "module:callable" -> (config)->(ok, reason)
-    validation_profile: str | None = None  # "module:ATTR" -> a ValidationProfile (required if code_evolution)
+    validation_profile: str | None = None  # "module:ATTR" -> ValidationProfile; code mode needs this or the opt-out
     pre_validate: str | None = None  # "module:callable" -> (config)->config pre-validation hook
+    allow_unvalidated_code: bool = False  # code mode w/o a profile: run evolved code UNSANDBOXED (conscious opt-out)
 
     @model_validator(mode="after")
-    def _profile_required_for_code_evolution(self) -> EvolveConfig:
-        if self.evolution.code_evolution and not self.validation_profile:
-            raise ValueError("validation_profile is required when evolution.code_evolution is True")
+    def _validation_required_for_code_evolution(self) -> EvolveConfig:
+        # Secure-by-default: a code-evolution run must be AST-screened by a profile OR consciously opted out
+        # of it. Fail-closed for every consumer (no lakehouse carve-out); silent omission is rejected.
+        if self.evolution.code_evolution and self.validation_profile is None and not self.allow_unvalidated_code:
+            raise ValueError(
+                "code_evolution=True requires a validation_profile, or an explicit "
+                "allow_unvalidated_code=True (runs LLM-generated code unsandboxed)"
+            )
         return self
 
 

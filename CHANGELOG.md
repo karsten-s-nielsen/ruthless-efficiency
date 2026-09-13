@@ -5,6 +5,37 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [0.6.0] - 2026-09-12
+
+Minor rather than patch: `EvolveStrategy` gains a general code-evolution mode and a new config field, and
+the evolve seed-cache key changes once (see Changed). **The `fingerprint`/`fingerprint_model` primitive is
+byte-stable — the golden digest table did not move; general (non-evolve) consumer caches are unaffected.**
+
+### Added
+- **General code-evolution mode for `EvolveStrategy`.** With `evolution.code_evolution=True`, the evolved
+  program source is always attached to the candidate and handed to the entrypoint via `program_path`, and the
+  `config = {…}` dict is optional — so a consumer can evolve an arbitrarily-named function (no HPO params, no
+  `custom_embed`/`custom_layers`) through ruthless instead of driving OpenEvolve directly.
+- **`EvolveConfig.allow_unvalidated_code`** (default `False`) — the explicit opt-out that permits a code run
+  without a `validation_profile`.
+
+### Changed
+- **`code_evolution` reframed.** Source-attach is now keyed on the flag, not on the hardcoded
+  `custom_embed`/`custom_layers` names (which leave the core); the name-detection becomes a consumer concern
+  expressed through `validation_profile`.
+- **Validation is secure-by-default.** A `code_evolution=True` run requires a `validation_profile` **or**
+  `allow_unvalidated_code=True`; the previous "profile required in code mode" rule is generalized (no config
+  that was valid at 0.5.0 becomes invalid).
+- **Seed-cache invalidation (evolve only).** `_eval_fingerprint` now includes `code_evolution`, so a
+  `resume=True` evolve run upgrading from ≤0.5.0 recomputes its seed results once instead of reusing a value
+  computed under the old source-attach behavior. This changes the evolve seed-cache key only; it is not a
+  `fingerprint` primitive-digest change.
+
+### Security
+- Code evolution is now **default-closed**: a run with no `validation_profile` is rejected unless the operator
+  consciously sets `allow_unvalidated_code=True`, which runs LLM-generated code unsandboxed. The AST belt
+  remains defense-in-depth, not a boundary (ADR-001).
+
 ## [0.5.0] - 2026-08-31
 
 Minor rather than patch: the public API gains two names (`Observer`, `ProgressEvent`) and

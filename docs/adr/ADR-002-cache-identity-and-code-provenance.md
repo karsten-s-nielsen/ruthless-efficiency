@@ -113,6 +113,15 @@ a test can only fail after someone has already shipped the inconsistency to a re
   a new type (`Path`, `datetime`, `Enum`) is an explicit change with a test rather than an accident.
 - **The evolve seed cache invalidated once.** Same input set, new digest value, so existing on-disk caches
   miss and recompute. Benign, and in the fail-closed direction.
+- **(0.6.0) The evolve seed cache invalidated a second time — a _different_ mechanism.**
+  `EvolveStrategy._eval_fingerprint` now folds `evolution.code_evolution` into the seed-cache identity,
+  because that flag decides whether the evolved source is attached to a candidate and so changes what a
+  config-only seed evaluates to. Unlike the invalidation above, the **primitive digest did not move**: the
+  golden table is unchanged and general (non-evolve) consumer caches are untouched — only the evolve
+  seed-cache _key_ (a strategy-level composition over the primitive) gains an input. Existing evolve seed
+  caches miss once and recompute; benign, fail-closed direction. It illustrates the ADR's own boundary — the
+  *primitive* is the compatibility contract; a strategy composing extra inputs on top of it is free to, and
+  must, extend its own identity when new inputs determine content.
 - **(0.4.0) A second review obligation, of exactly the same kind as the first.** The golden table proves
   every *payload* is pinned; nothing proves every `_tag` *branch* has a payload. A new branch can land
   with no case and the table stays green while the new type goes unguarded indefinitely. Extending `_tag`

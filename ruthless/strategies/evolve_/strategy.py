@@ -24,7 +24,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from ruthless._fingerprint import fingerprint_model
+from ruthless._fingerprint import fingerprint, fingerprint_model
 from ruthless._io import program_to_path
 from ruthless._logging import get_logger
 from ruthless._provenance import code_identity
@@ -109,6 +109,7 @@ def _build_evaluator(cfg: EvolveConfig, backend: ComputeBackend, objective: Remo
         fitness_config=cfg.fitness,
         code_evolution=cfg.evolution.code_evolution,
         validation_profile=profile,
+        allow_unvalidated_code=cfg.allow_unvalidated_code,
         search_space_validator=ssv,
         pre_validate=pre,
         timeout=cfg.evaluation.timeout_seconds,
@@ -144,13 +145,15 @@ _SEED_CACHE_EXCLUDE = frozenset(
 
 
 def _eval_fingerprint(cfg: EvolveConfig) -> str:
-    """Deterministic identity of the eval params that determine seed-result CONTENT.
+    """Deterministic identity of the params that determine seed-result CONTENT.
 
-    Delegates to the shared core primitive, which covers EVERY EvalConfig field except
-    `_SEED_CACHE_EXCLUDE`, so a new field is picked up automatically (fail-closed - see
-    `ruthless._fingerprint.fingerprint_model`). The policy of WHAT evolve excludes stays here; the
-    hashing lives in core."""
-    return fingerprint_model(cfg.evaluation, exclude=_SEED_CACHE_EXCLUDE)
+    Covers EVERY EvalConfig field except `_SEED_CACHE_EXCLUDE` (fail-closed - a new field is picked up
+    automatically; see `ruthless._fingerprint.fingerprint_model`) PLUS `evolution.code_evolution`, because
+    that flag decides whether the evolved source is attached to the candidate, which changes what a
+    config-only seed evaluates to (spec §7). `fingerprint` is Mapping-only, so compose via a mapping. The
+    policy of WHAT determines seed content stays here; the hashing lives in core."""
+    base = fingerprint_model(cfg.evaluation, exclude=_SEED_CACHE_EXCLUDE)
+    return fingerprint({"eval": base, "code_evolution": cfg.evolution.code_evolution})
 
 
 def _load_cached_seeds(
