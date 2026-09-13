@@ -162,6 +162,14 @@ def test_eval_fingerprint_tracks_epochs_and_seed_but_not_timeout(seed_dir):
     assert strat._eval_fingerprint(_cfg(seed_dir, evaluation={"epochs": 3, "seed": 7, "timeout_seconds": 1})) == base
 
 
+def test_eval_fingerprint_tracks_code_evolution(seed_dir):
+    """code_evolution decides whether the evolved source is part of the evaluated artifact, so it must be in
+    the seed-cache identity (spec §7) — a config-only seed evaluates differently in code mode."""
+    base = strat._eval_fingerprint(_cfg(seed_dir))  # code_evolution defaults to False
+    flipped = strat._eval_fingerprint(_cfg(seed_dir, evolution={"code_evolution": True}, allow_unvalidated_code=True))
+    assert flipped != base
+
+
 def test_a_zero_score_seed_result_is_never_cache_readable(seed_dir, tmp_path):
     """Load-bearing for _SEED_CACHE_EXCLUDE's `timeout_seconds` entry (spec §3.2). A truncated run maps
     to the worst-score sentinel (combined_score=0), is WRITTEN to the seed-results dir like any other

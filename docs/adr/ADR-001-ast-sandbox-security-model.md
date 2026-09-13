@@ -61,3 +61,22 @@ Use a **default-deny AST allowlist**, parameterised per consumer by a `Validatio
   shape — the generic validator stays in the substrate.
 - **Maintenance cost.** New legitimate constructs (a new builtin, a new namespace) require an explicit
   allowlist addition; this is the intended trade-off for failing closed.
+
+## Addendum (0.6.0) — general code evolution is default-closed
+
+`0.6.0` generalises `EvolveStrategy` to evolve arbitrarily-named code, and reframes when this belt runs.
+Source-attach is now keyed on `evolution.code_evolution`, not on the hardcoded
+`custom_embed`/`custom_layers` names, which leave the core. The belt's **validation logic is unchanged** —
+it still validates only `custom_embed`/`custom_layers` bodies and passes any other top-level function
+through as a "config-only program". Since `validate_program` is now only ever called for code-evolution
+candidates, its previously-vestigial `code_evolution` parameter (and the "code evolution disabled" rejection
+branch) were removed as dead code — a signature-only change to an internal function, no allowlist behavior
+affected.
+
+Because the belt is structurally lakehouse-shaped and does not fit a general scoring function, validation
+becomes **opt-out-gated rather than mandatory — but secure-by-default**: a `code_evolution=True` run is
+**rejected** (at config validation *and* at `EvolveEvaluator` construction) unless it either supplies a
+`validation_profile` or sets `EvolveConfig.allow_unvalidated_code=True`. Setting that opt-out runs
+LLM-generated code **unsandboxed by conscious operator choice** — the same "belt, not a boundary" caveat
+above applies with full force: real isolation must come from the execution environment. The default
+(no profile, no opt-out) fails closed, so silent unsandboxed execution is impossible.

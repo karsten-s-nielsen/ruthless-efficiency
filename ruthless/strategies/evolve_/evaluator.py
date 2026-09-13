@@ -45,8 +45,6 @@ def fail_metrics() -> dict[str, float]:
 @dataclass(frozen=True)
 class Program:
     config: dict[str, Any]
-    has_custom_embed: bool
-    has_custom_layers: bool
     source: str
 
 
@@ -63,20 +61,13 @@ def _extract_config(tree: ast.Module, source: str, filename: str) -> dict[str, A
                 if not isinstance(raw, dict):
                     raise ValueError(f"config must be a dict, got {type(raw).__name__} in {filename}")
                 return raw
-    raise ValueError(f"No 'config = {{...}}' assignment found in {filename}")
+    return {}  # absence is benign (a code program need not carry params); a malformed literal above still raises
 
 
 def _load_program(program_path: str) -> Program:
     source = Path(program_path).read_text(encoding="utf-8")
     tree = ast.parse(source, filename=program_path)
-    config = _extract_config(tree, source, program_path)
-    func_names = {node.name for node in ast.iter_child_nodes(tree) if isinstance(node, ast.FunctionDef)}
-    return Program(
-        config=config,
-        has_custom_embed="custom_embed" in func_names,
-        has_custom_layers="custom_layers" in func_names,
-        source=source,
-    )
+    return Program(config=_extract_config(tree, source, program_path), source=source)
 
 
 class EvolveEvaluator:
@@ -88,10 +79,18 @@ class EvolveEvaluator:
         fitness_config: FitnessConfig,
         code_evolution: bool = False,
         validation_profile: ValidationProfile | None = None,
+        allow_unvalidated_code: bool = False,
         search_space_validator: Callable[[dict[str, Any]], tuple[bool, str]] | None = None,
         pre_validate: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         timeout: float | None = None,
     ) -> None:
+        # Secure-by-default (defense-in-depth; the config validator is the primary gate): a code-evolution
+        # run must be AST-screened by a profile OR consciously opted out of it.
+        if code_evolution and validation_profile is None and not allow_unvalidated_code:
+            raise FatalEvaluationError(
+                "code_evolution requires a validation_profile, or an explicit "
+                "allow_unvalidated_code=True to run LLM-generated code unsandboxed"
+            )
         self._backend = backend
         self._objective = objective
         self._fitness_config = fitness_config
@@ -118,15 +117,13 @@ class EvolveEvaluator:
                 return self._sentinel(f"search_space: {reason}", kind="objective")
 
         program_source: str | None = None
-        if program.has_custom_embed or program.has_custom_layers:
-            if self._validation_profile is None:
-                return self._sentinel("no_profile: Level-2 program but no ValidationProfile", kind="objective")
-            valid, reason = validate_program(
-                program.source, self._validation_profile, code_evolution=self._code_evolution
-            )
-            if not valid:
-                _log.warning("validation_rejected", extra={"program": program_path, "reason": reason})
-                return self._sentinel(f"validation_rejected: {reason}", kind="objective")
+        if self._code_evolution:
+            if self._validation_profile is not None:
+                valid, reason = validate_program(program.source, self._validation_profile)
+                if not valid:
+                    _log.warning("validation_rejected", extra={"program": program_path, "reason": reason})
+                    return self._sentinel(f"validation_rejected: {reason}", kind="objective")
+            # profile is None here ONLY when allow_unvalidated_code=True (enforced in __init__) — conscious opt-out
             program_source = program.source
 
         candidate = Candidate(id=Path(program_path).stem, params=config, program=program_source)

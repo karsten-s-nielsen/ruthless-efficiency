@@ -1,5 +1,7 @@
 import textwrap
 
+import pytest
+
 from ruthless.config import FitnessConfig
 from ruthless.errors import FatalEvaluationError, TransientEvaluationError
 from ruthless.remote import RemoteRef
@@ -62,14 +64,82 @@ def _evaluator(backend, **kw):
     )
 
 
-def test_evaluate_dispatches_and_computes_combined_score(tmp_path):
+def _evaluator_optout(backend, **kw):
+    return EvolveEvaluator(
+        backend=backend,
+        objective=_FakeObjective(),
+        fitness_config=FitnessConfig(primary="primary", combined_weights={"primary": 0.75, "aux": 0.25}),
+        validation_profile=None,
+        code_evolution=True,
+        allow_unvalidated_code=True,
+        **kw,
+    )
+
+
+def test_code_mode_config_only_attaches_source(tmp_path):
+    # was test_evaluate_dispatches_and_computes_combined_score. Under the reframe, code_evolution=True always
+    # attaches source; the weighted-combined_score pin is retained (GCE-PLAN-01).
     backend = _FakeBackend(metrics={"primary": 1.0, "aux": 0.0})
     path = _write(tmp_path, 'config = {"hidden_dim": 256}\n')
     result = _evaluator(backend).evaluate(path)
-    assert result.metrics["combined_score"] == 0.75  # 0.75*1.0 + 0.25*0.0
+    assert result.metrics["combined_score"] == 0.75  # 0.75*1.0 + 0.25*0.0 — pins the WEIGHTED branch
     assert backend.candidate is not None
     assert backend.candidate.params == {"hidden_dim": 256}
-    assert backend.candidate.program is None  # config-only -> no program
+    assert backend.candidate.program is not None  # code mode -> source attached
+
+
+def test_hpo_mode_config_only_has_no_program(tmp_path):
+    backend = _FakeBackend(metrics={"primary": 1.0, "aux": 0.0})
+    ev = EvolveEvaluator(
+        backend=backend,
+        objective=_FakeObjective(),
+        fitness_config=FitnessConfig(primary="primary", combined_weights={"primary": 0.75, "aux": 0.25}),
+        code_evolution=False,
+    )
+    ev.evaluate(_write(tmp_path, 'config = {"hidden_dim": 256}\n'))
+    assert backend.candidate is not None and backend.candidate.program is None
+
+
+def test_code_mode_config_optional(tmp_path):
+    backend = _FakeBackend(metrics={"primary": 1.0, "aux": 0.0})
+    src = "def score(x):\n    return x * 2\n"  # no config = {...}
+    _evaluator_optout(backend).evaluate(_write(tmp_path, src))
+    assert backend.candidate is not None
+    assert backend.candidate.params == {}
+    assert backend.candidate.program is not None
+
+
+def test_code_mode_with_optout_skips_validation(tmp_path):
+    backend = _FakeBackend(metrics={"primary": 1.0, "aux": 0.0})
+    src = "def anything(a, b):\n    return a + b\n"  # arbitrary name; would fail the sandbox belt if run
+    result = _evaluator_optout(backend).evaluate(_write(tmp_path, src))
+    assert "combined_score" in result.metrics and result.metrics["combined_score"] > 0.0
+    assert backend.candidate is not None and backend.candidate.program is not None
+
+
+def test_optout_dispatches_lakehouse_shaped_source_unvalidated(tmp_path):
+    # GCE-SPEC-07: opt-out bypasses even a custom_embed program (no profile) — source attached, NOT validated.
+    backend = _FakeBackend()
+    src = """\
+        def custom_embed(self, x, y):
+            import os
+            return x
+    """
+    result = _evaluator_optout(backend).evaluate(_write(tmp_path, src))
+    assert backend.candidate is not None and backend.candidate.program is not None
+    assert result.metrics["combined_score"] > 0.0  # dispatched, not the validation-rejected sentinel (0.0)
+
+
+def test_evaluator_rejects_code_evolution_without_profile_or_optout():
+    with pytest.raises(FatalEvaluationError, match="requires a validation_profile"):
+        EvolveEvaluator(
+            backend=_FakeBackend(),
+            objective=_FakeObjective(),
+            fitness_config=FitnessConfig(primary="primary"),
+            code_evolution=True,
+            validation_profile=None,
+            allow_unvalidated_code=False,
+        )
 
 
 def test_level2_passes_source_as_candidate_program(tmp_path):

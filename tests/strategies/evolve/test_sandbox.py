@@ -336,17 +336,6 @@ class TestValidatorRejects:
         assert not valid
         assert "__" in reason
 
-    def test_code_evolution_disabled_rejects_custom_embed(self) -> None:
-        source = textwrap.dedent("""\
-            config = {"hidden_dim": 256}
-
-            def custom_embed(self, x, y):
-                return x + y
-        """)
-        valid, reason = validate_program(source, _TEST_PROFILE, code_evolution=False)
-        assert not valid
-        assert "disabled" in reason.lower()
-
     def test_custom_layers_wrong_signature(self) -> None:
         source = textwrap.dedent("""\
             config = {"hidden_dim": 256}

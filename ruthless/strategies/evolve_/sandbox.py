@@ -544,13 +544,12 @@ def _validate_custom_embed(
 # ---------------------------------------------------------------------------
 
 
-def validate_program(
-    source: str,
-    profile: ValidationProfile,
-    *,
-    code_evolution: bool = True,
-) -> tuple[bool, str]:
+def validate_program(source: str, profile: ValidationProfile) -> tuple[bool, str]:
     """Validate an evolve program source against a ValidationProfile.
+
+    Only ever called for code-evolution candidates (the caller gates on it); a program with no
+    ``custom_embed``/``custom_layers`` passes as "config-only" and everything else is checked against the
+    profile's allowlist.
 
     Parameters
     ----------
@@ -558,10 +557,6 @@ def validate_program(
         Python source code of the candidate program.
     profile:
         Target-specific validation rules.
-    code_evolution:
-        Whether Level 2 code evolution is enabled. When ``False``,
-        programs containing ``custom_embed`` or ``custom_layers``
-        are rejected.
 
     Returns
     -------
@@ -579,15 +574,11 @@ def validate_program(
     has_custom_embed = "custom_embed" in functions
     has_custom_layers = "custom_layers" in functions
 
-    # Step 3: Config-only program (Level 1 backward compat)
+    # Step 3: Config-only program (no custom_embed/custom_layers to validate)
     if not has_custom_embed and not has_custom_layers:
         return True, "config-only program"
 
-    # Step 4: Code evolution disabled
-    if not code_evolution:
-        return False, "Code evolution is disabled — custom_embed/custom_layers not allowed"
-
-    # Step 5: Validate custom_layers first (extracts dynamic attr names)
+    # Step 4: Validate custom_layers first (extracts dynamic attr names)
     dynamic_attrs: set[str] = set()
     if has_custom_layers:
         keys, err = _validate_custom_layers(functions["custom_layers"], profile)
@@ -595,7 +586,7 @@ def validate_program(
             return False, err
         dynamic_attrs = keys
 
-    # Step 6: Validate custom_embed
+    # Step 5: Validate custom_embed
     if has_custom_embed:
         err = _validate_custom_embed(functions["custom_embed"], profile, dynamic_attrs)
         if err:

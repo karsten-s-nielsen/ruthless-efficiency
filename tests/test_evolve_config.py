@@ -63,8 +63,8 @@ def test_random_strategy_still_loads_via_union():
     assert isinstance(cfg.strategy, RandomConfig)
 
 
-def test_code_evolution_requires_validation_profile():
-    with pytest.raises(ValidationError, match="validation_profile is required"):
+def test_code_evolution_without_profile_or_optout_is_rejected():
+    with pytest.raises(ValidationError, match="requires a validation_profile"):
         EvolveConfig.model_validate(
             {
                 "kind": "evolve",
@@ -74,3 +74,32 @@ def test_code_evolution_requires_validation_profile():
                 "evolution": {"code_evolution": True},
             }
         )
+
+
+def test_code_evolution_optout_allows_no_profile():
+    cfg = EvolveConfig.model_validate(
+        {
+            "kind": "evolve",
+            "fitness": {"primary": "s"},
+            "entrypoint": "m:f",
+            "seed_programs_dir": "seeds",
+            "evolution": {"code_evolution": True},
+            "allow_unvalidated_code": True,
+        }
+    )
+    assert cfg.allow_unvalidated_code is True
+    assert cfg.validation_profile is None
+
+
+def test_code_evolution_profile_still_satisfies_the_gate():
+    cfg = EvolveConfig.model_validate(
+        {
+            "kind": "evolve",
+            "fitness": {"primary": "s"},
+            "entrypoint": "m:f",
+            "seed_programs_dir": "seeds",
+            "evolution": {"code_evolution": True},
+            "validation_profile": "pkg.mod:PROFILE",
+        }
+    )
+    assert cfg.allow_unvalidated_code is False and cfg.validation_profile == "pkg.mod:PROFILE"

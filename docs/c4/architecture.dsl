@@ -79,7 +79,7 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
 
             evolve = container "EvolveStrategy [extra]" "Thin adapter over OpenEvolve: config translation, AST sandbox, seed cache/resume, the evaluator plugin, config-derived RemoteObjective." "Python: ruthless.strategies.evolve_" {
                 sandbox = component "sandbox" "AST allow-list validator (ValidationProfile + validate_program), domain-free (ADR-001)." "Python"
-                evaluator = component "evaluator" "EvolveEvaluator: OpenEvolve plugin; sandbox gate; single failure->sentinel mapping." "Python"
+                evaluator = component "evaluator" "EvolveEvaluator: OpenEvolve plugin; secure-by-default gate (a profile or allow_unvalidated_code); config-optional in code mode; single failure->sentinel mapping." "Python"
                 evostrategy = component "strategy" "EvolveStrategy.run; _translate_to_openevolve_config; _remote_objective_from_config; seed resume." "Python"
 
                 evostrategy -> sandbox "Validates Level-2 source"
@@ -87,7 +87,7 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 evaluator -> sandbox "Gates candidate code"
                 evaluator -> backendPort "Dispatches via the port"
                 evostrategy -> strategyPort "Implements SearchStrategy"
-                evostrategy -> fingerprint "Seed-cache identity (fingerprint_model, timeout_seconds excluded)"
+                evostrategy -> fingerprint "Seed-cache identity (EvalConfig + code_evolution; timeout_seconds excluded)"
                 evostrategy -> provenance "Stamps code identity into the Result"
             }
 
