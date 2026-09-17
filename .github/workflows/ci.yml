@@ -22,7 +22,7 @@ jobs:
       # v9 flipped `prune-cache` to false by default (upstream did it to reduce PyPI load). We take
       # that default deliberately: caches get larger but restore faster, and this dep tree is nowhere
       # near the 10 GB repo cache limit. Set `prune-cache: true` here to revert to pre-v9 behaviour.
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - run: uv python install 3.10
       - run: uv venv --python 3.10
       - run: uv pip install -e ".[dev,backends,evolve,optuna]"
@@ -41,7 +41,7 @@ jobs:
       # v9 flipped `prune-cache` to false by default (upstream did it to reduce PyPI load). We take
       # that default deliberately: caches get larger but restore faster, and this dep tree is nowhere
       # near the 10 GB repo cache limit. Set `prune-cache: true` here to revert to pre-v9 behaviour.
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - run: uv python install 3.10
       - run: uv venv --python 3.10
       - run: uv pip install -e ".[dev]"
@@ -58,7 +58,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - run: uv python install 3.10
       - run: uv venv --python 3.10
       - run: uv pip install -e ".[dev]"
