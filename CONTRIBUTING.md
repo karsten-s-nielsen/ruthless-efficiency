@@ -75,7 +75,7 @@ All five must pass before opening a PR (Shift Left — catch it locally, not in 
 
 For the system-level view, download [`docs/c4/architecture.html`](docs/c4/architecture.html) and open
 it in a browser (C4 System Context / Container / Component diagrams). The conventions above are
-detailed in [`CLAUDE.md`](CLAUDE.md); the design rationale is in the
+detailed in [`AGENTS.md`](AGENTS.md); the design rationale is in the
 [spec](docs/superpowers/specs/2026-05-28-optimization-engine-carveout-design.md).
 
 ## Versioning

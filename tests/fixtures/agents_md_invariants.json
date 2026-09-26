@@ -1,0 +1,33 @@
+{
+  "count": 28,
+  "entries": [
+    {"id": "arch-hexagonal-ports", "class1_anchor": "defines the ports and value types", "symbols": ["Objective", "SearchStrategy", "ComputeBackend", "Candidate", "Evaluation", "Result"], "home": "agents"},
+    {"id": "arch-one-way-deps", "class1_anchor": "one-way dependency direction", "symbols": ["import-linter", "lint-imports", "core-isolation"], "home": "agents"},
+    {"id": "arch-strategy-owns-loop", "class1_anchor": "each strategy owns its loop", "symbols": ["report.py", "template-method"], "home": "context:architecture-rationale"},
+    {"id": "arch-backend-dispatch", "class1_anchor": "inter-candidate dispatch path", "symbols": ["InProcessBackend", "BackendPool", "RemoteObjective", "RemoteRef", "local_cuda", "remote_ssh", "hf_jobs"], "home": "context:architecture-rationale"},
+    {"id": "arch-timeout-contract", "class1_anchor": "enforce the per-candidate timeout", "symbols": ["document-and-ignore"], "home": "context:architecture-rationale"},
+    {"id": "arch-unified-error-model", "class1_anchor": "Backends never record a sentinel score", "symbols": ["TransientEvaluationError", "FatalEvaluationError", "EvolveEvaluator"], "home": "context:architecture-rationale"},
+    {"id": "conv-scored-metric-finiteness", "class1_anchor": "Scored-metric finiteness only", "symbols": ["classify_metric"], "home": "agents"},
+    {"id": "conv-fatal-vs-penalty", "class1_anchor": "Fatal errors vs. penalties are distinct", "symbols": ["ruthless.errors", "penalty_metrics"], "home": "agents"},
+    {"id": "conv-candidate-hashable", "class1_anchor": "Candidate is hashable", "symbols": ["frozen", "__hash__", "params"], "home": "agents"},
+    {"id": "conv-result-immutable", "class1_anchor": "treat-as-immutable once returned", "symbols": ["SearchStrategy.run"], "home": "agents"},
+    {"id": "conv-map-work-units", "class1_anchor": "always attempts EVERY unit", "symbols": ["map_work_units", "WorkUnitMapError", "BrokenExecutor", "on_error"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-cache-exclusion-set", "class1_anchor": "Cache identity is a declared EXCLUSION set", "symbols": ["ruthless._fingerprint", "fingerprint_model", "_SEED_CACHE_EXCLUDE"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-tag-branch-order", "class1_anchor": "branch order is load-bearing", "symbols": ["Enum", "IntEnum", "StrEnum", "datetime", "date"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-digest-compat-contract", "class1_anchor": "Digest bytes are a compatibility contract", "symbols": ["fingerprint_model", "test_fingerprint_golden.py"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-no-md-digest", "class1_anchor": "no .md file may quote a digest", "symbols": ["test_docs_no_digest_literals.py"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-pydantic-pin", "class1_anchor": "digests model_dump()", "symbols": ["pydantic", "model_dump", "fingerprint_model"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-provenance", "class1_anchor": "Provenance never overclaims", "symbols": ["ruthless._provenance", "code_identity"], "home": "context:cache-identity-and-fingerprint"},
+    {"id": "conv-version-ssot", "class1_anchor": "lives in ruthless/_version.py", "symbols": ["ruthless/_version.py", "hatchling", "dynamic"], "home": "agents"},
+    {"id": "conv-config-union", "class1_anchor": "discriminated-union surface", "symbols": ["RuthlessConfig", "FloatRange", "IntRange", "Choice"], "home": "agents"},
+    {"id": "conv-logging", "class1_anchor": "Library never configures root logging", "symbols": ["ruthless._logging.get_logger"], "home": "agents"},
+    {"id": "conv-cli-loader", "class1_anchor": "CLI objective loader is trusted-config-only", "symbols": ["resolve_objective", "importlib", "isinstance"], "home": "agents"},
+    {"id": "p2-cached-objective", "class1_anchor": "rejects tuning any param not in patch_params", "symbols": ["CachedObjective", "evaluate_patch", "patch_params", "assert_cache_equivalence"], "home": "context:phases-and-scope"},
+    {"id": "p2-optuna-resume", "class1_anchor": "no lost/dup trials", "symbols": ["OptunaStrategy", "study.trials", "SQLite"], "home": "context:phases-and-scope"},
+    {"id": "p2-observer", "class1_anchor": "raising observer is logged-and-isolated", "symbols": ["Observer", "ProgressEvent", "positional-only"], "home": "context:phases-and-scope"},
+    {"id": "p2-groupscoring-deferred", "class1_anchor": "Group-scoring was deferred", "symbols": ["Group-scoring", "score_fn"], "home": "context:phases-and-scope"},
+    {"id": "gate-local-quality", "class1_anchor": "Run all five before declaring work done", "symbols": ["lint-imports", "pyright", "ruff"], "home": "agents"},
+    {"id": "workflow-approval", "class1_anchor": "No commit without explicit user approval", "symbols": ["/final-review", "worktrees"], "home": "agents"},
+    {"id": "tech-pins", "class1_anchor": "pinned for RNG-stream stability", "symbols": ["numpy", "pydantic", "pyyaml"], "home": "agents"}
+  ]
+}

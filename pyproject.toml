@@ -46,8 +46,28 @@ exclude = [
     # "a workflow-only change does not alter the package" true rather than nearly-true.
     "/.github",
     "/CLAUDE.md",
+    # AGENTS.md is the renamed always-loaded instruction file (CLAUDE.md is now a one-line @import
+    # shim); docs/context/ is its dev-facing class-2 context store. Both are instruction docs, kept out
+    # of the package exactly as /CLAUDE.md and /docs/superpowers are — the wheel already ships only the
+    # `ruthless` package, and this keeps them out of the sdist too (no packaged-content change).
+    "/AGENTS.md",
+    "/docs/context",
     "/docs/superpowers",
     "/docs/audits",
+    # Dev-tool state and local caches. hatchling's sdist is NOT VCS-aware here (it ships .gitignored
+    # dirs unless they are excluded explicitly), so these are listed by hand — they are not source and
+    # must never reach the published sdist. Before this list existed the 0.6.0 sdist shipped ~107 such
+    # files, including the .gitignored `.serena/project.local.yml`. (`.gitignore` itself is force-shipped
+    # by hatchling and is benign/standard, so it is not listed here.)
+    "/.hypothesis",
+    "/.serena",
+    "/.superpowers",
+    "/.ruff_cache",
+    "/.pytest_cache",
+    "/.import_linter_cache",
+    "/.venv",
+    "/.claude",
+    "/.gitattributes",
 ]
 
 [tool.ruff]
