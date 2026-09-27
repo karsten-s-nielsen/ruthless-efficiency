@@ -16,6 +16,7 @@ from ruthless.config import (
     Choice,
     EvolveConfig,
     FloatRange,
+    GridConfig,
     IntRange,
     OptunaConfig,
     RandomConfig,
@@ -32,6 +33,7 @@ from ruthless.objective import CachedObjective, Objective
 from ruthless.remote import RemoteObjective, RemoteRef
 from ruthless.report import render_json, render_summary_md
 from ruthless.result import Candidate, Evaluation, Metrics, ProgressEvent, Result
+from ruthless.strategies.grid_ import GridSearchStrategy
 from ruthless.strategies.random_.strategy import RandomSearchStrategy
 from ruthless.strategy import Direction, Observer, SearchStrategy
 from ruthless.testing import assert_cache_equivalence
@@ -47,6 +49,9 @@ __all__ = [
     "EvolveConfig",
     "FatalEvaluationError",
     "FloatRange",
+    "GridConfig",
+    # built-in strategy (core; no extra required)
+    "GridSearchStrategy",
     "InProcessBackend",
     "IntRange",
     "Metrics",

@@ -10,9 +10,10 @@ from collections.abc import Callable
 from typing import Any
 
 from ruthless.backend import InProcessBackend
-from ruthless.config import RandomConfig, RuthlessConfig
+from ruthless.config import GridConfig, RandomConfig, RuthlessConfig
 from ruthless.objective import Objective
 from ruthless.report import render_json, render_summary_md
+from ruthless.strategies.grid_ import GridSearchStrategy
 from ruthless.strategies.random_.strategy import RandomSearchStrategy
 
 
@@ -32,6 +33,7 @@ def resolve_objective(spec: str) -> Objective:
 # new CLI-available strategy registers a row rather than editing a branch.
 _STRATEGY_BUILDERS: dict[type, Callable[[Any, int], Any]] = {
     RandomConfig: lambda strategy_cfg, seed: RandomSearchStrategy(strategy_cfg, seed=seed),
+    GridConfig: lambda strategy_cfg, seed: GridSearchStrategy(strategy_cfg),  # deterministic; ignores seed
 }
 
 

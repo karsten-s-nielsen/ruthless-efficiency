@@ -5,6 +5,42 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (with the usual `0.x` caveat: the public
 API may change between minor versions until `1.0`).
 
+## [0.7.0] - 2026-09-26
+
+Minor: adds a native `GridSearchStrategy` and a library-wide resume-store identity rule. **The
+`fingerprint`/`fingerprint_model` primitive is byte-stable — the golden digest table did not move; existing
+`fingerprint` caches are unaffected.** This release *does* contain deliberate breaking changes to the resume
+surface (see Changed/Breaking).
+
+### Added
+- **`GridSearchStrategy` + `GridConfig`** (`kind="grid"`) — a zero-dependency, deterministic, CLI-available
+  baseline strategy over a discrete grid, with three designs: `cartesian` (full product), `one_at_a_time`
+  (a baseline point plus one-parameter sweeps) and `points` (an explicit list). Discrete levels only
+  (`Choice`/`IntRange`; a `FloatRange` is rejected — express discrete floats as a `Choice`). A closed-form
+  `max_points` guard (default 100 000) rejects an over-large grid at construction without enumerating it.
+- **Fingerprint-keyed sqlite resume for the grid** — with `store` set, each evaluated point persists
+  (committed before the next point) keyed by `fingerprint(params)`; a rerun evaluates only the points not yet
+  done. A meta table binds the store to one (grid config + objective) identity and fails loud on mismatch.
+  See ADR-003.
+- **`ruthless.strategies.optuna_.adopt_legacy_store(config)`** — a one-shot escape hatch to adopt a legacy
+  (pre-0.7.0) Optuna SQLite study under the new identity guard.
+
+### Changed
+- **`StoreConfig.objective_id` is now required** (a non-empty string). A `store` block without it now fails
+  construction. It declares the objective (code + data version) a resume store's results are valid for.
+- **Optuna resume is now identity-guarded.** A resume whose objective (`objective_id`) **or** config
+  (`param_space`/`sampler`/`direction`/`metric`) differs from the stored study now raises, instead of
+  silently continuing a differently-shaped study (0.6.0 behaviour). Remedy: use a new `store.path` for a
+  genuinely different objective/config. `n_trials` and `warm_start` are excluded from the identity (resume
+  knobs), so raising the budget still resumes cleanly.
+- **Resuming a legacy (≤0.6.0, attr-less) Optuna store now raises** with a one-line remedy
+  (`adopt_legacy_store(config)`), rather than silently continuing.
+
+### Notes
+- `fingerprint` caches are **not** invalidated (the digest/`_tag` path is untouched). A grid store's row key
+  *does* depend on the digest (ADR-002/ADR-003), so a future `_tag` change would invalidate grid stores and
+  must say so in its CHANGELOG entry.
+
 ## [0.6.0] - 2026-09-12
 
 Minor rather than patch: `EvolveStrategy` gains a general code-evolution mode and a new config field, and

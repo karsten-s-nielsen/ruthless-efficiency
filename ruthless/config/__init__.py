@@ -22,7 +22,7 @@ from ruthless.config.common import (
     StoreConfig,
 )
 from ruthless.config.space import Choice, FloatRange, IntRange, ParamSpec
-from ruthless.config.strategies import EvolveConfig, OptunaConfig, RandomConfig, StrategyConfig
+from ruthless.config.strategies import EvolveConfig, GridConfig, OptunaConfig, RandomConfig, StrategyConfig
 
 
 class RuthlessConfig(BaseModel):
@@ -43,6 +43,7 @@ __all__ = [
     "EvolveConfig",
     "FitnessConfig",
     "FloatRange",
+    "GridConfig",
     "IntRange",
     "LLMConfig",
     "LLMModelConfig",

@@ -20,7 +20,7 @@ def test_loads_optuna_with_param_space_and_store():
                     "k3": {"kind": "float", "lo": 0.1, "hi": 5.0, "log": True},
                 },
                 "warm_start": {"x": 0.0, "k3": 1.0},
-                "store": {"kind": "sqlite", "path": "results/study.db"},
+                "store": {"kind": "sqlite", "path": "results/study.db", "objective_id": "test-obj-v1"},
             },
         }
     )

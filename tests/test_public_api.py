@@ -28,11 +28,13 @@ _EXPECTED_PUBLIC = {
     "InProcessBackend",
     # built-in strategy (core; no extra required)
     "RandomSearchStrategy",
+    "GridSearchStrategy",
     # config surface
     "RuthlessConfig",
     "RandomConfig",
     "OptunaConfig",
     "EvolveConfig",
+    "GridConfig",
     "FloatRange",
     "IntRange",
     "Choice",
@@ -76,6 +78,21 @@ def test_top_level_import_does_not_require_optional_extras() -> None:
     # optuna or openevolve (those live behind the [optuna]/[evolve] extras). Checked in a clean
     # subprocess so an extra imported by another test in this process cannot mask a regression.
     code = "import ruthless, sys; assert 'optuna' not in sys.modules and 'openevolve' not in sys.modules"
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 - fixed argv, no shell
+
+
+def test_grid_is_core_and_pulls_no_extras() -> None:
+    code = (
+        "import ruthless, sys; ruthless.GridSearchStrategy;"
+        " assert 'optuna' not in sys.modules and 'openevolve' not in sys.modules"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 - fixed argv, no shell
+
+
+def test_optuna_pkg_import_is_lazy() -> None:
+    # Importing the optuna_ package (for adopt_legacy_store / OptunaStrategy) must not import optuna at
+    # module load; optuna is imported lazily inside run()/adopt_legacy_store().
+    code = "import sys, ruthless.strategies.optuna_ as m; m.adopt_legacy_store; assert 'optuna' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 - fixed argv, no shell
 
 
