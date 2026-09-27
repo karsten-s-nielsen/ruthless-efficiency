@@ -118,3 +118,12 @@ class EvalConfig(BaseModel):
 class StoreConfig(BaseModel):
     kind: Literal["sqlite"] = "sqlite"  # only sqlite in Phase 2 (single-process resume; RDB is §10/later)
     path: str
+    objective_id: str  # REQUIRED identity of the objective (code + data version) these results are valid for
+
+    @model_validator(mode="after")
+    def _objective_id_nonempty(self) -> StoreConfig:
+        # Fail-closed (same direction as fingerprint_model's exclusion-set rule): the caller must DECLARE the
+        # objective identity a resume store's rows belong to; a blank id is as bad as none.
+        if not self.objective_id.strip():
+            raise ValueError("StoreConfig.objective_id must be a non-empty string")
+        return self

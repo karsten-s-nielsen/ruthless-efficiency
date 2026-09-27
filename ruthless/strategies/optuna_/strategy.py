@@ -6,8 +6,10 @@ study so they span the whole store on resume."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+from ruthless._fingerprint import fingerprint_model
 from ruthless._logging import get_logger
 from ruthless._provenance import code_identity
 from ruthless.backend import ComputeBackend
@@ -18,6 +20,55 @@ from ruthless.result import Candidate, Evaluation, ProgressEvent, Result
 from ruthless.strategy import Observer
 
 _log = get_logger("strategies.optuna")
+
+_IDENTITY_KEY = "ruthless_identity"
+
+
+def _identity(cfg: OptunaConfig) -> dict[str, object]:
+    """The resume identity stamped on a store-backed study: the objective identity plus a config fingerprint.
+    `n_trials`/`warm_start` are excluded (resume knobs, not identity); `store` is excluded (its path is not
+    identity, and its objective_id is a sub-field here)."""
+    if cfg.store is None:
+        raise ValueError("_identity requires cfg.store to be set")
+    return {
+        "schema": 1,
+        "objective_id": cfg.store.objective_id,
+        "config_fingerprint": fingerprint_model(cfg, exclude=frozenset({"store", "n_trials", "warm_start"})),
+    }
+
+
+def _check_identity(stored: object, want: dict[str, object], path: str) -> None:
+    if not isinstance(stored, dict):  # split so the type checker narrows `stored` to dict before indexing
+        raise ValueError(f"optuna store at {path!r} has a corrupt/unrecognised ruthless_identity; use a new store path")
+    schema = stored.get("schema")
+    if type(schema) is not int or schema != 1 or "objective_id" not in stored or "config_fingerprint" not in stored:
+        # type-strict on schema: reject True/1.0 (bool is an int subclass; 1.0 == 1) as an unrecognised writer.
+        raise ValueError(f"optuna store at {path!r} has a corrupt/unrecognised ruthless_identity; use a new store path")
+    if stored["objective_id"] != want["objective_id"]:
+        raise ValueError(f"optuna store at {path!r} was written for a different objective; use a new store path")
+    if stored["config_fingerprint"] != want["config_fingerprint"]:
+        raise ValueError(f"optuna store at {path!r} was written for a different config; use a new store path")
+
+
+def adopt_legacy_store(config: OptunaConfig) -> None:
+    """One-shot, deliberate adoption of a legacy (pre-0.7.0) Optuna SQLite study: stamp `ruthless_identity`
+    once from `config`. Refuses a config without a store, a path with no study, and a study that already
+    carries the attr (never overwrites). See ADR-003."""
+    import optuna
+
+    if config.store is None:
+        raise ValueError("adopt_legacy_store requires config.store to be set")
+    path = config.store.path
+    if not Path(path).exists():
+        raise ValueError(f"no optuna study to adopt at {path!r}: file does not exist")
+    try:
+        study = optuna.load_study(study_name=path, storage=f"sqlite:///{path}")
+    except KeyError as e:  # study name not present in the storage
+        raise ValueError(f"no optuna study to adopt at {path!r}: {e}") from e
+    if study.user_attrs.get(_IDENTITY_KEY) is not None:
+        raise ValueError(f"optuna store at {path!r} already carries a ruthless_identity; refusing to overwrite")
+    study.set_user_attr(_IDENTITY_KEY, _identity(config))
+    _log.info("adopted_legacy_store", extra={"path": path, "objective_id": config.store.objective_id})
 
 
 def _suggest(trial: Any, name: str, spec: ParamSpec) -> Any:
@@ -90,7 +141,6 @@ class OptunaStrategy:
             extra = set(cfg.param_space) - cached_obj.patch_params
             if extra:  # H1/M5: tuning a non-patch param would change the cached invariant -> wrong score
                 raise ValueError(f"param_space keys {sorted(extra)} are not in objective.patch_params")
-            invariant = cached_obj.prepare()
 
         sampler = TPESampler(seed=self._seed) if cfg.sampler == "tpe" else RandomSampler(seed=self._seed)
         direction = cfg.direction.value  # "minimize"/"maximize" (matches random_/strategy.py)
@@ -102,6 +152,23 @@ class OptunaStrategy:
             direction=direction,
             load_if_exists=True,
         )
+        if cfg.store is not None:
+            # Store-identity guard (fail-closed, symmetric with Grid). create_study(load_if_exists=True)
+            # cannot itself tell fresh from resumed, so derive it from attr-presence + trial count:
+            # attr present -> compare; absent + 0 trials -> fresh (stamp once); absent + >=1 trial -> legacy.
+            stored = study.user_attrs.get(_IDENTITY_KEY)
+            want = _identity(cfg)
+            if stored is not None:
+                _check_identity(stored, want, cfg.store.path)
+            elif len(study.trials) == 0:
+                study.set_user_attr(_IDENTITY_KEY, want)  # one atomic write; no partial-state to reason about
+            else:
+                raise ValueError(
+                    f"optuna store at {cfg.store.path!r} predates ruthless 0.7.0 identity guarding; run "
+                    "ruthless.strategies.optuna_.adopt_legacy_store(config) to adopt it"
+                )
+        if cached_obj is not None:  # prepare AFTER the guard: a mismatched/legacy store fails fast, no wasted prep
+            invariant = cached_obj.prepare()
         # Persisted-trial count taken BEFORE enqueue: on a fresh study this is 0; on resume it is the
         # count already in the store. `remaining` must subtract this — NOT the post-enqueue count —
         # otherwise the enqueued WAITING baseline is double-counted (subtracted from the budget AND

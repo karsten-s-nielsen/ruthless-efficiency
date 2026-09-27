@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from ruthless._fingerprint import fingerprint
 from ruthless.config.common import (
     BackendConfig,
     EvalConfig,
@@ -16,7 +17,7 @@ from ruthless.config.common import (
     LLMConfig,
     StoreConfig,
 )
-from ruthless.config.space import ParamSpec
+from ruthless.config.space import Choice, FloatRange, ParamSpec, grid_plan_size, is_level
 from ruthless.strategy import Direction
 
 
@@ -83,5 +84,78 @@ class OptunaConfig(BaseModel):
         return self
 
 
-# Strategy union — random (1A) + evolve (1B) + optuna (Phase 2).
-StrategyConfig = Annotated[RandomConfig | EvolveConfig | OptunaConfig, Field(discriminator="kind")]
+def _assert_usable_level(value: object, name: str) -> None:
+    # A level becomes a Candidate param value (must be hashable, result.py) and a fingerprint/store key
+    # (must be _tag-supported). Validate BOTH at construction so a numpy scalar or a `set` fails here.
+    try:
+        hash(value)
+    except TypeError as e:
+        raise ValueError(f"level {value!r} for param {name!r} is unhashable ({e}); use a frozenset, not a set") from e
+    try:
+        fingerprint({name: value})
+    except TypeError as e:
+        raise ValueError(f"level {value!r} for param {name!r} is not fingerprint-able ({e}); use a native type") from e
+
+
+class GridConfig(BaseModel):
+    """Exhaustive/structured grid search (spec 2026-09-26). Three designs; discrete levels only (floats are
+    Choice). Zero-dependency; CLI-available. `store` (with a required `objective_id`) gives fingerprint-keyed
+    sqlite resume."""
+
+    kind: Literal["grid"]
+    metric: str
+    direction: Direction = Direction.MINIMIZE
+    design: Literal["cartesian", "one_at_a_time", "points"]
+    param_space: dict[str, ParamSpec]
+    baseline: dict[str, Any] | None = None
+    points: list[dict[str, Any]] | None = None
+    store: StoreConfig | None = None
+    max_points: int = 100_000
+
+    @model_validator(mode="after")
+    def _validate(self) -> GridConfig:
+        ps = self.param_space
+        if not ps:  # rule 1
+            raise ValueError("GridConfig.param_space must not be empty (a grid needs at least one dimension)")
+        floats = [k for k, s in ps.items() if isinstance(s, FloatRange)]  # rule 2
+        if floats:
+            raise ValueError(f"FloatRange param(s) {sorted(floats)} not allowed in a grid; use a Choice")
+        if self.design == "one_at_a_time":  # rule 3
+            if self.baseline is None:
+                raise ValueError("design 'one_at_a_time' requires a baseline")
+            if self.points is not None:
+                raise ValueError("points must not be set for design 'one_at_a_time'")
+        elif self.design == "points":
+            if not self.points:
+                raise ValueError("design 'points' requires a non-empty points list")
+            if self.baseline is not None:
+                raise ValueError("baseline must not be set for design 'points'")
+        elif self.baseline is not None or self.points is not None:  # cartesian
+            raise ValueError("baseline/points must not be set for design 'cartesian'")
+        n = grid_plan_size(self.design, ps, self.points)  # rule 4: closed-form, before membership
+        if n > self.max_points:
+            raise ValueError(f"grid has {n} points > max_points={self.max_points}; narrow the space or raise it")
+        for name, s in ps.items():  # rule 5
+            if isinstance(s, Choice):
+                for lvl in s.choices:
+                    _assert_usable_level(lvl, name)
+        if self.design == "one_at_a_time" and self.baseline is not None:  # rule 6 (None-check narrows for pyright)
+            if set(self.baseline) != set(ps):
+                raise ValueError(f"baseline keys {sorted(self.baseline)} must equal param_space keys {sorted(ps)}")
+            for k, v in self.baseline.items():
+                _assert_usable_level(v, k)
+                if not is_level(v, ps[k]):
+                    raise ValueError(f"baseline[{k!r}]={v!r} is not a level of {k!r}")
+        if self.design == "points" and self.points is not None:  # rule 7 (None-check narrows for pyright)
+            for i, pt in enumerate(self.points):
+                if set(pt) != set(ps):
+                    raise ValueError(f"points[{i}] keys {sorted(pt)} must equal param_space keys {sorted(ps)}")
+                for k, v in pt.items():
+                    _assert_usable_level(v, k)
+                    if not is_level(v, ps[k]):
+                        raise ValueError(f"points[{i}][{k!r}]={v!r} is not a level of {k!r}")
+        return self
+
+
+# Strategy union — random (1A) + evolve (1B) + optuna (Phase 2) + grid (0.7.0).
+StrategyConfig = Annotated[RandomConfig | EvolveConfig | OptunaConfig | GridConfig, Field(discriminator="kind")]

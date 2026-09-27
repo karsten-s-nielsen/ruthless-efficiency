@@ -14,11 +14,11 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
 
         optunalib = softwareSystem "Optuna" "Third-party hyperparameter-optimization library: owns the study/sampler/storage. OptunaStrategy wraps create_study + optimize, resuming from SQLite." "External"
 
-        res = softwareSystem "ruthless-efficiency" "Optimisation/search substrate: pure core + RandomSearch + (1B) EvolveStrategy over OpenEvolve + a multi-backend compute pool + (2) OptunaStrategy." {
+        res = softwareSystem "ruthless-efficiency" "Optimisation/search substrate: pure core + RandomSearch + (1B) EvolveStrategy over OpenEvolve + a multi-backend compute pool + (2) OptunaStrategy + (0.7.0) GridSearchStrategy." {
 
             cli = container "CLI" "Config-driven entry point: load config, resolve a trusted objective import-string, build the strategy, run it, print the report." "Python: ruthless.cli"
 
-            config = container "Config" "Layered Pydantic config package (space/common/strategies): discriminated strategy union (random | evolve | optuna) + param-space union + BackendConfig (shell-safe SSH-field validators)." "Python: pydantic v2, pyyaml"
+            config = container "Config" "Layered Pydantic config package (space/common/strategies): discriminated strategy union (random | evolve | optuna | grid) + param-space union + grid level/size helpers (closed-form guard) + StoreConfig (required objective_id) + BackendConfig (shell-safe SSH-field validators)." "Python: pydantic v2, pyyaml"
 
             random = container "RandomSearchStrategy" "Built-in zero-dependency search: seeded numpy RNG; drives the determinism gate." "Python: ruthless.strategies.random_"
 
@@ -91,29 +91,48 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
                 evostrategy -> provenance "Stamps code identity into the Result"
             }
 
-            optuna = container "OptunaStrategy [extra]" "Resumable Bayesian/sampler calibration: wraps an Optuna study (create_study + optimize), warm-start enqueue, ParamSpec->suggest, SQLite resume; uses the CachedObjective fast path; optional per-trial Observer hook." "Python: ruthless.strategies.optuna_" {
-                optstrategy = component "strategy" "OptunaStrategy.run: study/resume (load_if_exists + remaining-trials), warm-start, _suggest, best/history from study.trials; optional per-trial Observer via study.optimize callbacks (fault-isolated: a raising sink is logged, never aborts the search)." "Python"
+            optuna = container "OptunaStrategy [extra]" "Resumable Bayesian/sampler calibration: wraps an Optuna study (create_study + optimize), warm-start enqueue, ParamSpec->suggest, SQLite resume with a store-identity guard (objective_id + config_fingerprint in one ruthless_identity study attr; adopt_legacy_store for pre-0.7.0 stores); uses the CachedObjective fast path; optional per-trial Observer hook." "Python: ruthless.strategies.optuna_" {
+                optstrategy = component "strategy" "OptunaStrategy.run: study/resume (load_if_exists + remaining-trials + fail-closed identity guard), warm-start, _suggest, best/history from study.trials; optional per-trial Observer via study.optimize callbacks (fault-isolated: a raising sink is logged, never aborts the search); adopt_legacy_store one-shot." "Python"
 
                 optstrategy -> strategyPort "Implements SearchStrategy; fires the Observer per trial"
                 optstrategy -> objectivePort "Fast path via CachedObjective; else the backend port"
                 optstrategy -> result "Emits a ProgressEvent per completed trial to the observer"
                 optstrategy -> guards "Records penalty scores (degenerate trials)"
+                optstrategy -> fingerprint "config_fingerprint for the store-identity guard (ADR-003)"
                 optstrategy -> provenance "Stamps code identity into the Result"
+            }
+
+            grid = container "GridSearchStrategy" "Built-in zero-dependency exhaustive/structured grid search: cartesian | one_at_a_time | points designs; deterministic enumeration + fingerprint de-dup; optional fingerprint-keyed SQLite resume with a config+objective meta-guard (ADR-003)." "Python: ruthless.strategies.grid_" {
+                gridplan = component "plan" "enumerate_points: deterministic ordered enumeration per design; de-dup on fingerprint(params); stable g{i} ids." "Python"
+                gridstore = component "store" "GridStore: stdlib sqlite3 resume; rows keyed by fingerprint(params); grid_meta binds schema_version + config_fingerprint + objective_id and fails loud on mismatch; per-put commit; atomic meta init (ADR-003)." "Python"
+                gridstrategy = component "strategy" "GridSearchStrategy.run: enumerate -> evaluate (backend or CachedObjective fast path, lazy prepare) -> Result; scored-metric check; resume + n_from_store via GridStore." "Python"
+
+                gridstrategy -> gridplan "Enumerates the plan"
+                gridstrategy -> gridstore "Loads/persists evaluated points"
+                gridstrategy -> strategyPort "Implements SearchStrategy"
+                gridstrategy -> objectivePort "Fast path via CachedObjective; else the backend port"
+                gridstrategy -> fingerprint "Point identity (fingerprint(params))"
+                gridstrategy -> provenance "Stamps code identity into the Result"
+                gridplan -> fingerprint "De-dups on the digest"
+                gridstore -> fingerprint "config_fingerprint = fingerprint_model(cfg, exclude={store, max_points})"
             }
         }
 
         user -> random "Constructs and runs (primary API)" "Python"
         user -> evolve "Runs structural search" "Python"
         user -> optuna "Calibrates parameters (Optuna)" "Python"
+        user -> grid "Runs a grid / OAT / points search" "Python"
         user -> cli "Runs a search" "CLI"
 
         config -> configFile "Reads and parses" "PyYAML safe_load"
         cli -> config "Loads and validates"
         cli -> random "Builds and runs"
+        cli -> grid "Builds and runs (needs nothing beyond the config)"
         cli -> report "Renders the Result"
         cli -> objective "Resolves a trusted import-string" "importlib + getattr"
 
         random -> core "Uses ports + value types; checks the scored metric"
+        grid -> core "Uses ports, value types, CachedObjective, fingerprint identity, errors"
         report -> core "Reads the Result value type"
 
         evolve -> core "Uses ports, value types, error taxonomy"
@@ -155,6 +174,11 @@ workspace "ruthless-efficiency" "A general optimisation/search substrate: a pure
         }
 
         component optuna "OptunaComponents" {
+            include *
+            autoLayout
+        }
+
+        component grid "GridComponents" {
             include *
             autoLayout
         }

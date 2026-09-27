@@ -1,7 +1,7 @@
 # ruthless-efficiency
 
 A general optimisation/search substrate: a pure hexagonal core + pluggable search strategies +
-pluggable compute backends. Ships at 0.6.0 (0.x — API unstable). On release, bump the one line in
+pluggable compute backends. Ships at 0.7.0 (0.x — API unstable). On release, bump the one line in
 `ruthless/_version.py`; the only remaining hand-edits are the "Ships at" line here and the CHANGELOG
 section header.
 
@@ -88,3 +88,4 @@ pyright, import-linter, hatchling.
 
 - `docs/adr/ADR-001-ast-sandbox-security-model.md` — AST allowlist for evolve Level-2 code evolution.
 - `docs/adr/ADR-002-cache-identity-and-code-provenance.md` — cache identity as a core primitive with an exclusion-set scope; provenance never emits a SHA without a tree state.
+- `docs/adr/ADR-003-grid-resume-store-schema.md` — grid/optuna resume store schema + a library-wide store-identity rule (`StoreConfig.objective_id`).
